@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+    <flow name="depositsFlow">
+        <logger message="#['Request Header \n http.request.uri = ' +message.inboundProperties.'http.request.uri'+  '\n content-length = '+message.inboundProperties.'content-length' +  '\n http.query.string = '+message.inboundProperties.'http.query.string'+  '\n accept-language = '+message.inboundProperties.'accept-language'+  '\n postman-token = '+message.inboundProperties.'postman-token'+  '\n http.query.params = '+message.inboundProperties.'http.query.params'+  '\n http.listener.path = '+message.inboundProperties.'http.listener.path'+  '\n http.uri.params = '+message.inboundProperties.'http.uri.params'+  '\n host = '+message.inboundProperties.'host'+  '\n content-type = '+message.inboundProperties.'content-type'+  '\n http.method = '+message.inboundProperties.'http.method'+  '\n caccept-encoding = '+message.inboundProperties.'accept-encoding'+  '\n http.relative.path = '+message.inboundProperties.'http.relative.path'+  '\n http.request.path = '+message.inboundProperties.'http.request.path']  #['\n \n Request Payload is :  \n' +message.payloadAs(java.lang.String)]" level="INFO" doc:name="Deposits Request Payload" category="Deposits | Deposits Request" doc:description="Deposits Request Payload Logger"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <set-variable variableName="Request3Ds" value="#[payload.3DSInfo]" doc:name="Deposits Request Message" doc:description="Storing Deposits Request variable for 3DSInfo"/> 
+        <scripting:transformer doc:name="Transform to Deposits Request " doc:description="Request Example:
+Input to Groovy:{&quot;CustomerId&quot;:&quot;1198765450081&quot;,&quot;OrderId&quot;:1014145,&quot;ProductId&quot;:287,&quot;LegalEntity&quot;:&quot;AxicorpLimited&quot;,&quot;Currency&quot;:&quot;GBP&quot;,&quot;Amount&quot;:1000.00,&quot;ClientIp&quot;:&quot;204.91.0.12&quot;,&quot;ClientSessionId&quot;:&quot;QWE@#wasdferty&quot;,&quot;SystemSourceId&quot;:6,&quot;InstrumentToken&quot;:&quot;CXta1O3GXfNJ3u&quot;,&quot;Client&quot;{&quot;FirstName&quot;:&quot;Joe&quot;,&quot;LastName&quot;:&quot;Smith&quot;,&quot;Phone&quot;:&quot;9876543223&quot;,&quot;Address&quot;:&quot;100QueenStreetWest&quot;,&quot;City&quot;:&quot;Toronto&quot;,&quot;Country&quot;:&quot;CA&quot;,&quot;State&quot;:&quot;ON&quot;,&quot;Postcode&quot;:&quot;M5H2N2&quot;,&quot;Email&quot;:&quot;Joe.Smith@canada.com&quot;},&quot;3DSInfo&quot;:{&quot;ECI&quot;:&quot;5&quot;,&quot;CAVV&quot;:&quot;AAABBhkXYgAAAAACBxdiENhf7A+=&quot;},&quot;AdditionalInfo&quot;:{}}Output From Groovy:
+{&quot;merchantRefNum&quot;:&quot;1014145&quot;,&quot;amount&quot;:100000,&quot;settleWithAuth&quot;:true,&quot;dupCheck&quot;:true,&quot;card&quot;:{&quot;paymentToken&quot;:&quot;CXta1O3GXfNJ3uN&quot;},&quot;authentication&quot;:{&quot;eci&quot;:5,&quot;cavv&quot;:&quot;AAABBhkXYgAAAAACBxdiENhf7A+=&quot;},&quot;profile&quot;:{&quot;firstName&quot;:&quot;Joe&quot;,&quot;lastName&quot;:&quot;Smith&quot;,&quot;email&quot;:&quot;Joe.Smith@canada.com&quot;},&quot;customerIp&quot;:&quot;204.91.0.12&quot;,&quot;billingDetails&quot;:{&quot;street&quot;:&quot;100 Queen Street West&quot;,&quot;city&quot;:&quot;Toronto&quot;,&quot;state&quot;:&quot;ON&quot;,&quot;country&quot;:&quot;CA&quot;,&quot;zip&quot;:&quot;M5H 2N2&quot;,&quot;phone&quot;:&quot;&quot;9876543
+">
+            <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def result = new JsonBuilder()
+def request_Payload = payload
+message.setInvocationProperty('despositsRequest',request_Payload)
+String amount=request_Payload.Amount.toString()
+def request_3Dsinfo=message.getInvocationProperty('Request3Ds')
+String legalEntity =request_Payload.LegalEntity
+String currency=request_Payload.Currency
+new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+amount= new ConvertAmount().getAmount(amount,request_Payload.Currency)
+if(request_3Dsinfo.equals(null) ||request_3Dsinfo=="")
+{
+result merchantRefNum:request_Payload.OrderId.toString(),
+       amount:amount.toInteger(),
+	   settleWithAuth:true,
+	   dupCheck:${dupCheck},
+	   card:[
+	  	paymentToken:request_Payload.InstrumentToken
+	  	],
+	  profile:[
+	  	firstName:request_Payload.Client.FirstName,
+	  	lastName:request_Payload.Client.LastName,
+	  	email:request_Payload.Client.Email
+	  	],
+	  customerIp:request_Payload.ClientIp,
+	  billingDetails:[
+	  	street:request_Payload.Client.Address,
+	  	city:request_Payload.Client.City,
+	  	state:request_Payload.Client.State,
+	  	country:request_Payload.Client.Country,
+	  	zip:request_Payload.Client.Postcode,
+	  	phone:request_Payload.Client.Phone
+	  	],
+	  description:"${DepositDescription}"
+	  }
+   else{
+	  	def info_Eci=request_3Dsinfo.ECI
+     	def info_Cavv=request_3Dsinfo.CAVV
+     	result merchantRefNum:request_Payload.OrderId.toString(),
+       	amount:amount.toInteger(),
+	   	settleWithAuth:true,
+	   	dupCheck:${dupCheck},
+	   	card:[
+	  		paymentToken:request_Payload.InstrumentToken
+	  	],
+	  	authentication:[
+	  		eci:info_Eci.toInteger(),
+	  		cavv:info_Cavv
+	  	],
+	  	profile:[
+	  		firstName:request_Payload.Client.FirstName,
+	  		lastName:request_Payload.Client.LastName,
+	  		email:request_Payload.Client.Email
+	  		],
+	  	customerIp:request_Payload.ClientIp,
+	  	billingDetails:[
+	  		street:request_Payload.Client.Address,
+	  		city:request_Payload.Client.City,
+	  		state:request_Payload.Client.State,
+	  		country:request_Payload.Client.Country,
+	  		zip:request_Payload.Client.Postcode,
+	  		phone:request_Payload.Client.Phone
+	  		],
+	  	description:"${DepositDescription}"
+	}
+	  
+	  return result.toString()]]></scripting:script>
+        </scripting:transformer>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" doc:name="Deposits Payload to Authorization API" category="Deposits || Deposits Payload to Authorization API" doc:description="Authorization API Transformation Request payload Logger"/>
+        <http:request config-ref="HTTP_Paysafe_API_Configuration" path="cardpayments/v1/accounts/{account_id}/auths" method="POST" doc:name="Authorization API" doc:description="Call to Authorization API">
+            <http:request-builder>
+                <http:uri-param paramName="account_id" value="#[flowVars.Account_Id]"/>
+                <http:header headerName="Content-Type" value="application/json"/>
+                <http:header headerName="Authorization" value="#[flowVars.Apikey]"/>
+
+
+            </http:request-builder>
+
+        </http:request>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" doc:name="Deposits Payload from Authorization API" category="Deposits ||Deposits Payload from Authorization API" doc:description="Authorization  API Response payload Logger"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <scatter-gather doc:name="Scatter-Gather" doc:description="PaySafe response Payload for Deposits and PaymentCMF. Parallel processing of this reponse data goes to portal [Deposit data]   and Payment Queue [Payment CMF]">
+            <processor-chain>
+                <scripting:transformer doc:name="Transform to Deposits Response" doc:description="Output from Groovy:
+{&quot;OrderId&quot;:1014145,&quot;ProviderReference&quot;:&quot;56dd1784-5ba0-4064-88cb-9d2b0a8f2cc1&quot;,&quot;ClientRedirectURL&quot;:&quot;&quot;,&quot;ClientRedirectType&quot;:&quot;NA&quot;,&quot;PostParameters&quot;:&quot;&quot;,&quot;PostPayload&quot;:&quot;&quot;,&quot;RecommendedDisplayType&quot;:&quot;None&quot;,&quot;RecommendedDisplayWidth&quot;:0,&quot;RecommendedDisplayHeight&quot;:0,&quot;PaymentStatus&quot;:&quot;ACCEPTED&quot;,&quot;PaymentCode&quot;:&quot;0000&quot;,&quot;PaymentMessage&quot;:&quot;COMPLETED&quot;,&quot;AdditionalInfo&quot;:{&quot;CardType&quot;:&quot;Visa&quot;,&quot;IsDebit&quot;:&quot;false&quot;,&quot;CardIssuedCountry&quot;:&quot;AU&quot;,&quot;AuthCode&quot;:&quot;101570&quot;}}">
+                    <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+                def result=""
+		        def response_Payload = payload
+				String payment_Code=""
+				String payment_Message=""
+				String card_Type=""
+				String is_Debit=""
+				def payment_Status=""
+				if(response_Payload.status=='COMPLETED')
+				{
+				       payment_Status="ACCEPTED"
+					   payment_Code="0000"
+					   payment_Message="COMPLETED"
+					   card_Type=muleContext.getRegistry().get("CardInformation")[response_Payload.card.type]
+					   is_Debit= muleContext.getRegistry().get("CardIsDebit")[card_Type]		   
+					}
+				result =[
+				       OrderId:response_Payload.merchantRefNum.toInteger(), \
+				       ProviderReference:response_Payload.id, \
+					   ClientRedirectURL:"", \
+					   ClientRedirectType:"NA", \
+					   PostParameters:"", \
+					   PostPayload:"", \
+					   RecommendedDisplayType:"None", \
+					   RecommendedDisplayWidth:0, \
+					   RecommendedDisplayHeight:0, \
+					   PaymentStatus:payment_Status, \
+					   PaymentCode:payment_Code, \
+					   PaymentMessage:payment_Message, \
+					   AdditionalInfo:[ \
+					   CardType:card_Type, \
+					   IsDebit:is_Debit,
+					   CardIssuedCountry:"AU", \
+					   AuthCode:response_Payload.authCode \
+					   ] \
+                    ]		
+					   return result]]></scripting:script>
+                </scripting:transformer>
+                <json:object-to-json-transformer doc:name="Object to JSON"/>
+                <logger message="#[payload]" level="INFO" doc:name="Deposits Response Payload" category="Deposits || Deposits Response" doc:description="Deposits Transformation Response payload Logger"/>
+            </processor-chain>
+            <processor-chain>
+                <scripting:transformer doc:name="Transform to PaymentCmf" doc:description="Output from Groovy:
+{&quot;OrderId&quot;:1014145,&quot;ClientIp&quot;:&quot;204.91.0.12&quot;,&quot;ProviderReference&quot;:&quot;56dd1784-5ba0-4064-88cb-9d2b0a8f2cc1&quot;,&quot;ProviderCode&quot;:&quot;0000&quot;,&quot;ProviderMessage&quot;:&quot;COMPLETED&quot;,&quot;ProviderApproved&quot;:&quot;true&quot;,&quot;CurrencyReceived&quot;:&quot;GBP&quot;,&quot;AmountReceived&quot;:1000.0,&quot;ClientAccNo&quot;:&quot;JoeSmith&quot;,&quot;ClientAccName&quot;:&quot;JoeSmith&quot;,&quot;AVSres&quot;:&quot;NOT_PROCESSED&quot;,&quot;Country&quot;:&quot;&quot;,&quot;InstrumentType&quot;:&quot;Card account&quot;}">
+                    <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def result=""
+				def response_payload = payload
+				String provider_Code=""
+				String provider_Message=""
+				String provider_Approved=""
+				if(response_payload.status == 'COMPLETED' )
+				{
+				String amount=response_payload.amount.toString()
+                    amount= new ConvertAmount().getAmountResponse(amount)
+					       provider_Code="0000"
+					       provider_Message=response_payload.status
+					       provider_Approved=true
+						   amount_Received=Double.parseDouble(amount)
+					 }
+				result=[
+					       OrderId:response_payload.merchantRefNum.toInteger(), \
+				           ClientIp:response_payload.customerIp, \
+				           ProviderReference:response_payload.id, \
+					       ProviderCode:provider_Code, \
+					       ProviderMessage:provider_Message, \
+					       ProviderApproved:provider_Approved,\
+					       CurrencyReceived:response_payload.currencyCode, \
+					       AmountReceived:amount_Received, \
+					       ClientAccNo:response_payload.profile.firstName+response_payload.profile.lastName, \
+					       ClientAccName:response_payload.profile.firstName+response_payload.profile.lastName, \
+					       AVSres:response_payload.avsResponse, \
+					       Country:"", \
+					       InstrumentType:"Card account" \
+				     ]
+					   
+					   return result]]></scripting:script>
+                </scripting:transformer>
+                <json:object-to-json-transformer doc:name="Object to JSON"/>
+                <logger message="#[payload]" level="INFO" doc:name="PaymentCmf Response Payload" category="PaymentCmf  || Before Queue" doc:description="PaymentCMF Transformation Response payload Logger"/>
+                <jms:outbound-endpoint queue="${platform.inbound.queue}" connector-ref="Active_MQ" doc:name="paymentCMF Queue" doc:description="Storing Response payload to paymentCMF Queue"/>
+                <logger message="#[payload]" level="INFO" category="PaymentCmf  || after Queue" doc:name="Response from Queue" doc:description="Queue Response payload Logger"/>
+            </processor-chain>
+        </scatter-gather>
+        <set-payload value="#[payload[0]]" doc:name="Deposits Response" doc:description="Response from Deposits Flow(Final Output)"/>
+        <logger message="#[payload]" level="INFO" doc:name="Deposits Response Payload" category="Deposits | Final response from Deposits" doc:description="Deposits Transformation Response payload Logger"/>
+    </flow>
+</mule>

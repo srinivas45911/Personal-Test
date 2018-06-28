@@ -1,0 +1,772 @@
+#%RAML 0.8
+title: Paysafe-Inbound-Adapter
+version: 1
+baseUri: https://services.axicorp.com.au
+
+
+mediaType: application/json
+schemas:
+  - ScalarReturn: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "ReturnValue": {"type": "string","description": "The return value for the function"},
+          "Message": {"type": "string","description": "The return value for the function"}
+        }
+      }
+  - postDepositRequest: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "CustomerId": {"type": "string","description": "AxiCorp Unique CRM Customer Number"},
+          "OrderId": {"type": "integer","description": "AxiCorp Unique Deposit Id","minimum": 0},
+          "ProductId": {"type": "integer","description": "Axi Payment Product Id. May need to vary logic for different ids. e.g. credit card vs eWallet payments"},
+          "LegalEntity": {"type": "string","description": "Axi Legal Entity for the related customer contract. e.g. AxiCorp Limited. Sometimes we need to use different merchantIds for each entity","minLength": 1},
+          "Currency": {"type": "string","description": "Currency of the deposit","pattern": "[A-Z]","minLength": 3,"maxLength": 3},
+          "Amount": {"type": "number","description": "Amount of the deposit","minimum": 0},
+          "InstrumentToken": {"type":"string","description": "For payments that support tokenised payment","minLength": 10,"maxLength": 80},
+          "ClientIp": {"type": "string","description": "Customer IP Address"},
+          "ClientSessionId": {"type": "string","description": "Customer SessionId to assist with log tracing"},
+          "SystemSourceId": {"type": ["null","integer"],"description": "To assist with log tracing. 5: PartnerPortal, 6: OnboardingPortal "},
+          "Client": {
+            "type": "object",
+            "description": "Additional custom key-value string pairs",
+            "properties": {
+              "FirstName": { "type": "string","description": "This is the customer’s first name.","minLength": 1},
+              "LastName": { "type": "string","description":"This is the customer’s last name.","minLength": 1},
+              "Phone": { "type": "string","description":"This is the customer's phone number.","minLength": 1},
+              "Address": { "type": "string","description":"This is the customer’s address."},
+              "City": { "type": "string","description":"This is the city where the address is located."},
+              "Country": { "type": "string","description":"This is the country where the address is located.","minLength": 1},
+              "State": { "type": "string","description":"This is the state/province/region in which the customer lives."},
+              "PostCode": { "type": "string","description":"This is the zip, postal, or post code of the customer's address."},
+              "Email": { "type": "string","description":"This is the customer's email address.","minLength": 1}
+              },
+              "required": ["FirstName","LastName","Email","Phone","Country"],            
+              "additionalProperties": { "type": ["null","string"] }
+             },          
+          "3DSInfo": {
+            "type": "object",
+            "description": "3DSecure Specific Data. This node should be optional, but if supplied, the elements within are required.",
+            "properties": {
+              "ECI": { "type": "string","minLength": 1},
+              "CAVV": { "type": "string","minLength": 1}
+            },
+            "required": ["ECI","CAVV"],            
+            "additionalProperties": { "type": "string" }
+          },
+          "AdditionalInfo": {
+            "type": "object",
+            "description": "Additional custom key-value string pairs",
+            "properties": {},                    
+            "additionalProperties": { "type": ["null","string"] }
+            }
+         },
+        "required": ["Client","OrderId","LegalEntity","Currency","Amount","InstrumentToken"]
+      }
+  - postDepositResponse: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "OrderId": {"type": "integer","description": "The unique id of the payment"},
+          "ProviderReference": {"type": "string","description": "The unique transaction id from the gateway"},
+          "ClientRedirectURL": {"type": "string","description": "The url to the hosted payment page of the gateway"},
+          "ClientRedirectType": {"type": "string", "enum":["NA","GET","POST"]},
+          "PostParameters": {"type": "string","description": "Optional RAW key value pairs to post to the above url. e.g. field1=x&field2=Y"},
+          "PostPayload": {"type": "string","description": "Optional custom payload. Usually json."},
+          "RecommendedDisplayType": {"type": "string","description": "Recommended display mode - Redirect, Popoup or Iframe"},
+          "RecommendedDisplayWidth": {"type": "number","description": "Recommended width in pixels"},
+          "RecommendedDisplayHeight": {"type": "number","description": "Recommended height in pixels"},
+          "PaymentStatus": {"type":"string", "enum":["PENDING","ACCEPTED","REJECTED","REDIRECT"],"description": "Payment status. PENDING, ACCEPTED or REJECTED for synchronous payments, REDIRECT for asynchronous"},
+          "PaymentCode": {"type": "string","description": "Gateway specific payment response code. Usually an integer."},
+          "PaymentMessage": {"type":"string","description":"Text response from payment gateway"},
+          "AdditionalInfo": {
+            "type": "object",
+            "description": "Additional custom key-value string pairs",
+            "properties": {
+                        "CardType": { "type" : "string", "description":"This is the type of card associated with the profile."},
+                        "IsDebit": { "type" : "string"},
+                        "CardIssuedCountry": { "type" : "string","minLength" : 2,"maxLength" : 2},
+                        "AuthCode": { "type" : "string"}
+               },
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      }
+ 
+  - paymentCMF: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "OrderId": {"type": "integer","description": "The unique id of the payment"},
+          "ClientIp": {"type": "string","description": "Customer IP Address"},
+          "ProviderReference": {"type": "string","description": "Gateway specific reference"},
+          "ProviderCode": {"type": "string","description": "Gateway specific payment response code. Usually an integer."},
+          "ProviderMessage": {"type":"string","description":"Text response from payment gateway"},
+          "ProviderApproved": {"type":"boolean","description":"True for payment Approved, otherwise false"},
+          "CurrencyReceived": {"type": "string","description": "Currency of the received deposit"},
+          "AmountReceived": {"type": "number","description": "Amount of the received deposit"},
+          "ClientAccNo": {"type": "string","description": "Partial CC number or Gateway customer account id or email"},
+          "ClientAccName": {"type": "string","description": "Cardholder or customer name if given"},
+          "AVS": {"type": "string","description": "For credit card AVS (address verification system) value if given. E.g. I for not verified"},
+          "Country": {"type": "string","description": "Country of the instrument if know. Iso A2 code. e.g. 'AU' for Australia","minLength" : 2,"maxLength" : 2},
+          "InstrumentType": {"type": "string","description": "Used to differentiate between methods on the same gateway."}
+        }
+      }
+
+  - postWithdrawalsRequest: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "WithdrawalRequests": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "WithdrawalId": {"type": "integer","description": "Out unique id for the payment","minimum": 0,"minLength": 1},
+                "LegalEntity": {"type": "string","description": "Axi Legal Entity for the related customer contract. e.g. AxiCorp Limited. Sometimes we need to use different merchantIds for each entity","minLength": 1},
+                "ProviderDepositReference": {"type": "string","description": "Typically the gateway tranID to be refunded"},
+                "Currency": {"type": "string","description": "Currency of the withdrawal","pattern": "[A-Z]","minLength": 3,"maxLength": 3},
+                "Amount": {"type": "number","description": "Amount of the withdrawal","minimum": 0,"minLength": 1},
+                "AdditionalInfo": {
+                  "type": "object",
+                  "description": "Additional custom key-value string pairs that are needed for the gateway",
+                  "properties": { "ClientName": {"type":"string","description":"This is the customer's first name.","minLength": 1},
+                                  "BankName": {"type":"string", "description":"This is the bank's name.","minLength": 1},
+                                  "ClientAccountNumber": {"type":"string", "description":"This is the customer's account number","minLength": 1},
+                                  "CardToken": {"type":"string", "description":"Permanent token from the vault","minLength": 1},
+                                  "ClientIp": {"type":"string", "description":"This is the customer's IP address.","minLength": 1}
+                                 },
+                                 "required": ["ClientIp","BankName","CardToken","ClientAccountNumber"],
+                  "additionalProperties": { "type": "string" }
+                }
+              },
+              "required": ["AdditionalInfo","WithdrawalId","Currency","Amount","LegalEntity"]
+            }
+          }  
+        }
+      }
+
+  - postWithdrawalsResponse: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+              "properties": {
+                "WithdrawalId": {"type": "integer","description": "Out unique id for the payment"},
+                "ProviderDepositReference": {"type": "string","description": "Typically the gateway tranID to be refunded"},
+                "Status": {"type": "string", "enum":["PENDING","SENT","FAILED"], "description":"  This is the status of the response"},
+                "ProviderReference": {"type": "string","description": "The gateway transaction id given to the refund or payout"},
+                "GatewayResponseCode": {"type": "string","description": "The gateway code used. Usually numerical. eg. status = 0"},
+                "GatewayResponseMessage": {"type": "string","description": "The gateway message - e.g. Successfully paid out"},
+                "Message": {"type": "string","description": "Further details."},
+                "AdditionalInfo": {
+                  "type": "object",
+                  "description": "Additional custom key-value string pairs",
+                  "properties": {},
+                  "additionalProperties": { "type": "string" }
+                }
+              }
+      }
+  - checkStatusRequest: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type" : "array",
+        "properties" : {
+          "WithdrawalId": {"type": "integer","description": "The unique id of the payment","minLength": 1},
+          "MerchantReference": {"type": "string","description": "The reference we used for the gateway (sometimes different or additiona prefix/suffixed orderid)"},
+          "ProviderReference": {"type": "string","description": "Gateway specific reference","minLength": 1},
+          "LegalEntity": {"type": "string","description": "Axi Legal Entity for the related customer contract. e.g. AxiCorp Limited. Sometimes we need to use different merchantIds for each entity","minLength": 1},
+          "Currency": {"type": "string","description": "Currency of the deposit","pattern": "[A-Z]","minLength": 3,"maxLength": 3}
+        },
+        "required": ["WithdrawalId","ProviderReference","LegalEntity","Currency"] 
+      }
+      
+  - checkStatusResponse: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+              "properties": {
+                "WithdrawalId": {"type": "integer","description": "Out unique id for the payment"},
+                "ProviderDepositReference": {"type": "string","description": "Typically the gateway tranID to be refunded"},
+                "Status": {"type": "string", "enum":["PENDING","SENT","FAILED"], "description":"This is the status of the response"},
+                "ProviderReference": {"type": "string","description": "The gateway transaction id given to the refund or payout"},
+                "GatewayResponseCode": {"type": "string","description": "The gateway code used. Usually numerical. eg. status = 0"},
+                "GatewayResponseMessage": {"type": "string","description": "The gateway message - e.g. Successfully paid out"},
+                "Message": {"type": "string","description": "Further details."},
+                "AdditionalInfo": {
+                  "type": "object",
+                  "description": "Additional custom key-value string pairs",
+                  "properties": {},
+                  "additionalProperties": { "type": "string" }
+                }
+              }
+      }
+    
+  - postInstrumentRequest: |
+      {
+       "$schema": "http://json-schema.org/draft-04/schema#",
+       "type": "object",
+       "properties": { 
+        "Instrument": {"type": "object", "description": "Additional custom key-value string pairs that are needed for the gateway", 
+          "properties": {
+               "InstrumentId": {"type": "string", "description": "InstrumentId"},
+               "GatewayNonce": {"type": "string", "description": "Single Use Token"},
+               "GatewayToken": {"type": ["string","null"],"description": "Permanent token from the vault"},
+               "type": {"type": "string","description": "e.g. Card account","minLength": 1},
+               "Currency": {"type": "string","description": "Currency of the related deposit","pattern": "[A-Z]","minLength": 3,"maxLength": 3},
+               "LegalEntity": {"type": "string","description": "Axi Legal Entity for the related customer contract. e.g. AxiCorp Limited. Sometimes we need to use different merchantIds for each entity","minLength": 1},
+               "SubType":  {"type": ["string","null"],"description": "e.g. Visa"},
+               "HolderName": {"type": ["string","null"],"description": "e.g. Name on card"},
+               "Identifier": {"type": ["string","null"],"description": "e.g. Partial card number"},
+               "ExpiryDate": {"type": "string","description": "Card Expiry","minLength": 1},
+               "TagName": {"type": "string","description": "TagName"},
+               "AdditionalInfo": {"type": "object","description": "Additional custom key-value string pairs",
+                 "properties": {},
+                 "additionalProperties": {"type": "string"}
+                    }},
+          "required": ["type","ExpiryDate","Currency","LegalEntity"]    
+          },              
+        "Client": {"type": "object","description": "Additional custom key-value string pairs that are needed for the gateway",
+          "properties": {
+               "ClientId": {"type": "string","description": "The unique external Id of the client. Account.Customer_Number2__c","minLength": 1},
+               "ProfileId": {"type": "string", "description": "The unique client identifier to be used for the gateway"},
+               "FirstName": {"type": "string","description": "This is the customer’s first name.","minLength": 1},
+               "MiddleName": {"type": "string","description": "This is the customer’s middle name"},
+               "LastName": {"type": "string","description": "This is the customer’s last name.","minLength": 1},
+               "DOB": {"type": "string", "description": "This is Date of Birth"},
+               "Phone": {"type": "string", "description": "This is the phone number to contact the recipient at this address, if it is different from the phone number in the profile."},
+               "Mobile": {"type": "string","description": "This is the customer mobile number"},
+               "Address": {"type": "string","description": "This is the customer's address","minLength": 1},
+               "City": {"type": "string","description": "This is the city where the address is located."},
+               "CountryA2": {"type": "string","description": "This is Client Country 2 letter code","minLength" : 2,"maxLength" : 2},
+               "CountryA3": {"type": "string","description": "This is Country 3 letter code"},
+               "State": {"type": "string","description": "This is the state/province/region in which the customer lives."},
+               "PostCode": {"type": "string","description": "This is the zip, postal, or post code of the customer's address.","minLength": 1},
+               "Email": {"type": "string","description": "This is the customer's email address.","minLength": 1},
+               "ClientIP": {"type": "string","description": "This is the customer's IP address."},
+               "AdditionalInfo": {"type": "object","description": "Additional custom key-value string pairs that are needed for the gateway",
+                 "properties": {
+                    "Locale": {"type": "string" ,"description": "This indicates the language of the profile.","minLength": 1}
+                     },
+                 "required": ["Locale"],
+                 "additionalProperties": {"type": "string"}
+              }
+            },
+          "required": ["AdditionalInfo","ClientId","CountryA2","PostCode","FirstName","LastName","Email","Address"]
+          },
+        "AdditionalInfo": {
+          "type": "object",
+          "description": "Additional custom key-value string pairs that are needed for the gateway",
+          "properties": {},
+          "additionalProperties": {"type":"string"}
+        }},
+       "required": ["Instrument","Client","AdditionalInfo"]
+       }   
+  - postInstrumentResponse: |
+         {
+          "$schema": "http://json-schema.org/draft-04/schema#",
+          "type": "object",
+          "properties": {
+            "Instrument": {
+                    "InstrumentId": {"type": "string","description": "e.g. MerchantRefNum"},
+                    "ProfileId": {"type": "string","description": "The unique client identifier to be used for the gateway"},
+                    "GatewayToken": {"type": ["string","null"],"description": "Permanent token from the vault"},
+                    "GatewayResponseCode": {"type": "string","description": "The gateway code used. Usually numerical. eg. status = 0"},
+                    "GatewayResponseMessage": {"type": "string","description": "The gateway message - e.g. Successfully paid out"},
+                    "GatewayStatus": {"type": "string","enum":["SUCCESS","FAILED"]},
+                    "Type": {"type": "string","description": "e.g. Card account/Bank account/eWallet"},
+                    "SubType": {"type": ["string","null"],"description": "e.g. Visa"},
+                    "IsDebit": {"type":"boolean","description":"True for card type debit, otherwise false"},
+                    "HolderName": {"type": ["string","null"],"description": "e.g. Name on card"},
+                    "Identifier": {"type": ["string","null"],"description": "e.g. Partial card number"},
+                    "ExpiryDate": {"type": ["string","null"],"description": "Card Expiry"},
+                    "IssuedCountry": {"type": ["string","null"],"description": "Issued Country","minLength" : 2,"maxLength" : 2},
+                    "AdditionalInfo": {
+                    "type": "object",
+                    "description": "Additional custom key-value string pairs",
+                    "properties": {
+                       "AVS": {"type": "string","description": "For credit card AVS (address verification system) value if given. E.g. I for not verified"},
+                       "CVV": {"type": "string","description": "For credit card CVV,This is the response to the cvv submitted with the transaction request."}
+                               },
+                    "additionalProperties": { "type": "string" }
+                  }
+                  },
+                  "Client": {
+                    "ClientId": {"type": "string","description": "The unique external Id of the client. Account.Customer_Number2__c"},
+                    "AdditionalInfo": {}
+                  }
+                }
+                }   
+  - postEnrollmentLookupRequest: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "OrderId": {"type": "integer","description": "The unique Id of the related deposit."},
+          "ClientId": {"type": "string","description": "The unique external Id of the client. Account.Customer_Number2__c","minLength": 1},
+          "Amount": {"type": "number","description": "Amount of the related deposit","minimum": 0},
+          "Currency": {"type": "string","description": "Currency of the related deposit","pattern": "[A-Z]","minLength": 3,"maxLength": 3},
+          "LegalEntity": {"type": "string","description": "Axi Legal Entity for the related customer contract. e.g. AxiCorp Limited. Sometimes we need to use different merchantIds for each entity","minLength": 1},
+          "CardToken": {"type": "string","description": "Permanent token from the vault","minLength": 1},
+          "AdditionalInfo": {
+            "type": "object",
+            "description": "Additional custom key-value string pairs that are needed for the gateway",
+            "properties": {
+                              "CustomerIp": {"type":"string", "description":"This is the customer's IP address.", "format" : "ipv4"},
+                              "UserAgent": {"type":"string", "description":"eg. Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.125 Safari/537.36","minLength": 1},
+                              "SourceUrl": {"type":"string", "description":"This is the fully qualified URL of the merchant's commercial or customer care website.","minLength": 1}
+                           },
+                           "required": ["CustomerIp","UserAgent","SourceUrl"],
+            "additionalProperties": { "type": "string" }
+          }
+        },
+       "required": ["AdditionalInfo","ClientId","LegalEntity","Currency","Amount","CardToken"]
+      }
+          
+  - postEnrollmentLookupResponse: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {  
+          "GatewayId": {"type": "string","description": "Enrollment Id from gateway"},       
+          "MerchantReference": {"type": "string","description": "Our unique reference. [Account.Customer_Number2__c]yyyyMMddHHmmss"},         
+          "AcsUrl": {"type": "string","description": "Url to redirect client in dialog"},
+          "GatewayResponseCode": {"type": "string","description": "The gateway code used. Usually numerical. eg. status = 0"},
+          "GatewayResponseMessage": {"type": "string","description": "The gateway message - e.g. Successfully paid out"},     
+          "PayAuthReq": {"type": "string","description": "Payment Authorisation Request"}, 
+          "ThreeDEnrolled": {"type": "string","description": "Y,A,N,U,E"}, 
+          "AdditionalInfo": {
+            "type": "object",
+            "description": "Additional custom key-value string pairs that are needed for the gateway",
+            "properties": {},
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      }
+               
+                
+  - postAuthenticationsRequest: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "EnrollmentLookupId": {"type": "string","description": "Obtained via -  postEnrollmentLookupResponse.GatewayId","minLength": 1},
+          "ClientId": {"type": "string","description": "The unique external Id of the client. Account.Customer_Number2__c"},
+          "Currency": {"type": "string","description": "Currency of the related deposit","pattern": "[A-Z]","minLength": 3,"maxLength": 3},
+          "LegalEntity": {"type": "string","description": "Axi Legal Entity for the related customer contract. e.g. AxiCorp Limited. Sometimes we need to use different merchantIds for each entity","minLength": 1},
+          "MerchantReference": {"type": "string","description": "Our unique reference. [Account.Customer_Number2__c]yyyyMMddHHmmss","minLength": 1},
+          "CardToken": {"type": "string","description": "Card Token value"},
+          "PayAuthResp": {"type": "string","description": "PaRes","minLength": 1},
+          "AdditionalInfo": {
+            "type": "object",
+            "description": "Additional custom key-value string pairs that are needed for the gateway",
+            "properties": {},
+            "additionalProperties": {"type": "string"}
+          }
+        },
+       "required": ["Currency","LegalEntity","EnrollmentLookupId","PayAuthResp","MerchantReference"]
+      }
+          
+  - postAuthenticationsResponse: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "AuthenticationId": {"type": "string","description": "Id returned"},
+          "MerchantReference": {"type": "string","description": "Our unique reference. [Account.Customer_Number2__c]yyyyMMddHHmmss"},
+          "GatewayResponseCode" : {"type": "string","description": "error code"},
+          "GatewayResponseMessage": {"type": "string","description": "error message"},
+          "Result": {"type": "string","description": "Y=success,A=attempted,N=failed,U=issuer_unavailable,E=error"},
+          "ECI": {"type": "integer","description": "5=success,6=attempts,7=non_authenticated"},
+          "CAVV": {"type": "string","description": " Cardholder Authentication Verification Value"},
+          "AdditionalInfo": {
+            "type": "object",
+            "description": "Additional custom key-value string pairs that are needed for the gateway",
+            "properties": {
+              "Status": {"type":"string","minLength": 1, "description":""},
+              "SignatureStatus": {"type":"string","description":"Y – All checks satisfied, N – At least one check failed","minLength": 1},
+              "XID": {"type":"string","description":"transaction identifier from card issuer.","minLength": 1}
+            },
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      }
+
+  - clientTokenResponse : |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "ApiKey": {"type": "string","description": "Security key"},
+          "MerchantId": {"type": "string","description": "Merchant AccountNo"}
+        }
+      }
+ 
+
+documentation:
+  - title: Introduction
+    content: |
+      API to act as common integration interface between AxiCorp systems and the external gateway - Ngan Luong
+      The standard pattern consists of four endpoints -
+        post /Deposits 
+        put  /PaymentNotificationToCmf
+        post /Withdrawals
+        post /Withdrawals/CheckStatus 
+      A fifth custom endpoint may be required if the gateway supports http notification callbacks. There 
+      are numerous variations for each gateway that mean that this can't be part of the standard patterns.
+        e.g. 
+        post or get /Notify  --> which would retrieve and pass the parameters to /PaymentNotificationToCmf
+        Some gateways use post callbacks and some use get. Some use form-url-encoded parameters and standard post params... etc
+
+
+/ClientToken:
+  description: |
+    This endpoint is not critical for Paysafe integration but is needed the standard pattern.  
+    Paysafe - terminology "single-use token-generating key" refer: https://developer.paysafe.com/en/sdks/paysafejs/overview/
+      Returns the key required for paysafejs client side code to operate. Inputs should be LegalEntity and Currency
+    Braintree - this is a dynamic value generated per session requiring gateway API calls. (not currently enabled via this endpoint - rather is available directly from Braintree adapter)
+  get:
+    queryParameters:
+      LegalEntity:
+        type: string
+        required: true
+        example: "AxiCorp Financial Services Pty Ltd"
+      Currency:
+        type: string
+        required: true
+        example: "USD"
+    responses:
+        200:
+          body:
+            schema: clientTokenResponse
+
+            example: |
+              {         
+                "ApiKey": "APIKEYVALUE",        
+                "MerchantId": "wefgsdugjhkfgsd"    
+              }
+  
+
+/Instrument:
+  description: |
+    We have a need for CRUD operations for instruments that are stored in a gateway's vault. 
+    E.g. Paysafe and Braintree both use single use 'nonce' values, that are then used to store 
+          the card details in the vault against the relevent customer/profile
+  post:
+    description: This is an 'upsert' function for inserting or updating an instrument and other required customer information. e.g. Customer data for fraud detection
+    body:
+      schema: postInstrumentRequest
+      example: |
+        {
+          "Instrument": {
+            "InstrumentId": "marchant-99941",
+            "type": "Card account",
+            "SubType": "Visa",
+            "GatewayNonce": "SCjSOyMBE88Oyq2O",
+            "GatewayToken": "hgfdsgfs",
+            "LegalEntity": "Axicorp Limited",
+            "Currency": "GBP",
+            "HolderName": "NJogn T Smith",
+            "Identifier": "1234",
+            "ExpiryDate": "2020-02-29",
+            "TagName": "MyHSBCCard",
+            "AdditionalInfo": {}
+          },
+          "Client": {
+            "ClientId": "12345",
+            "ProfileId": "sfdkjh432",
+            "FirstName": "John",
+            "MiddleName": "",
+            "LastName": "Smith",
+            "DOB": "1980-01-01",
+            "Email": "john.smith@test.com",
+            "Phone": "123456789",
+            "Mobile": "123456789",
+            "Address": "1 Some St",
+            "City": "Somewhere",
+            "State": "",
+            "PostCode": "1234",
+            "CountryA2": "AU",
+            "CountryA3": "AUS",
+            "ClientIP": "12.12.12.12",
+            "AdditionalInfo": {
+              "Locale": "en_GB"
+            }
+          },
+          "AdditionalInfo": {}
+        }
+    responses:
+      201:
+        description: Instrument added to gateway vault
+        body:
+          schema: postInstrumentResponse
+          example: |
+            {
+              "Instrument": {
+                "InstrumentId": "12345",
+                "ProfileId": "7beb723d-ae9d-407f-ace7-ab0bfca38e22",
+                "GatewayToken": "CMzpgWSwFUQTNOg",
+                "GatewayResponseCode": "",
+                "GatewayResponseMessage": "",
+                "GatewayStatus": "SUCCESS",
+                "Type": "Card account",
+                "SubType": "Visa",
+                "IsDebit": false,
+                "HolderName": "John Smith",
+                "Identifier": "1234",
+                "ExpiryDate": "2019-02-02",
+                "IssuedCountry": "AU",
+                "AdditionalInfo": {
+                "AVS": "12345",
+                       "CVV": "123"
+             }
+              },
+              "Client": {
+                "ClientId": "1234",
+                "AdditionalInfo": {}
+              }
+            }        
+            
+
+
+/ThreeDSecure:
+  description: Functions for 3DSecure checks. e.g.  Verified by Visa and Mastercard SecureCode
+  
+  /EnrollmentLookup:
+    description: |
+      CardNonce or CardToken is required
+      Paysafe refer https://developer.paysafe.com/en/3d-secure/api/#/reference/0/enrollment-lookups/enrollment-lookup-with-a-payment-token
+    post:
+      description: Post request to see if card is enrolled and get a redirect URL for the client
+      body:
+        schema: postEnrollmentLookupRequest
+        example: |
+          {
+            "OrderId": 123456,
+            "ClientId": "058698",
+            "Amount": 123.45,
+            "Currency": "USD",
+            "LegalEntity": "Axicorp Limited",
+            "CardToken": "ClknqYzUNIzF9WF",
+            "AdditionalInfo": {
+              "CustomerIp": "248.234.32.234",
+              "UserAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.125 Safari/537.36",
+              "SourceUrl": "https://clientportal.axicorp.com/somepage.aspx"
+            }
+          }
+      responses:
+          200:
+            body:
+              schema: postEnrollmentLookupResponse
+              example: |
+                {  
+                  "GatewayId": "e067d83f-add7-4b6b-8884-dfa8693dde1f",       
+                  "MerchantReference": "2387874329843298",  
+                  "GatewayResponseCode": "",
+                  "GatewayResponseMessage": "",         
+                  "AcsUrl": "https://pay.test.netbanx.com/emulator/test_acs",
+                  "PayAuthReq": "eNpVUk1TwjAUvOdXOIznJoU...",
+                  "ThreeDEnrolled": "Y",
+                  "AdditionalInfo": {}
+                }
+             
+  /Authentications:
+    description: |
+      Submit 3DS auth data from client to get results
+      Paysafe refer - https://developer.paysafe.com/en/3d-secure/api/#/reference/0/authentications/authentications
+    post:
+      body:
+        schema: postAuthenticationsRequest
+        example: |
+          {
+            "EnrollmentLookupId": "d8968ae4-07b8-4725-89ba-557c5bf2f62c",
+            "ClientId": "058698",
+            "MerchantReference": "123456", 
+            "Currency": "GBP",  
+            "LegalEntity": "Axicorp Limited",
+            "CardToken": "ClknqYzUNIzF9WF",
+            "PayAuthResp": "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",
+            "AdditionalInfo": {}
+          }
+      responses:
+          200:
+            body:
+              schema: postAuthenticationsResponse
+              example: |
+                {
+                  "AuthenticationId": "5d4db3bc-34c9-417f-a051-0d992ad9284e", 
+                  "ClientId": "123456", 
+                  "MerchantReference": "12345620180529115248",
+                  "GatewayResponseCode": "",
+                  "GatewayResponseMessage": "",
+                  "Result": "Y",
+                  "ECI": "5",
+                  "CAVV": "AAABBhkXYgAAAAACBxdiENhf7A+=",
+                  "AdditionalInfo": {
+                    "Status": "Completed",
+                    "SignatureStatus": "Y",
+                    "XID": "aWg4N1ZZOE53TkFrazJuMmkyRDA="
+                  }
+                }
+
+/Deposits:
+  description: Represents the resource for deposit requests aka orders aka sales
+  post:
+    description: Create a new deposit record with the gateway. Returns the status of the payment or client redirection values.
+    body:
+      schema: postDepositRequest
+      example: |
+        {
+          "CustomerId": "1198765450081",
+          "OrderId": 98765,
+          "ProductId": 287,
+          "LegalEntity": "Axicorp Limited",
+          "Currency": "GBP",
+          "Amount": 1000.12,
+          "ClientIp": "201.36.21.45",
+          "ClientSessionId": "QWE!@#wasdferty",
+          "SystemSourceId": 6,
+          "InstrumentToken": "CXta1O3GXfNJ3uN",
+          "Client": {
+            "FirstName": "Someone",
+            "LastName": "Buying",
+            "Phone": "9876543223",
+            "Address": "1,Bay Street",
+            "City": "Somewhere",
+            "Country": "US",
+            "State": "NY",
+            "PostCode": "12345",
+            "Email": "someone@gmail.com"
+          },
+          "3DSInfo": { 
+            "ECI": "5",
+            "CAVV": "AAABBhkXYgAAAAACBxdiENhf7A+="
+          },
+          "AdditionalInfo": {}
+        }
+    responses:
+      201:
+          description: Deposit request persisted successfully
+          body:
+              example: |
+                {
+                  "OrderId": 98765,
+                  "ProviderReference": "7573f618-2f63-45aa-ae96-8412206ca403",
+                  "ClientRedirectURL": "",
+                  "ClientRedirectType": "NA",
+                  "PostParameters": "",
+                  "PostPayload": "",
+                  "RecommendedDisplayType": "None",
+                  "RecommendedDisplayWidth": 0,
+                  "RecommendedDisplayHeight": 0,
+                  "PaymentStatus": "ACCEPTED",
+                  "PaymentCode": "0000",
+                  "PaymentMessage": "COMPLETED",
+                  "AdditionalInfo": {
+                    "CardType": "Visa",
+                    "IsDebit": "false",
+                    "CardIssuedCountry": "AU",
+                    "AuthCode": "180796"
+                  }
+                }
+
+
+/Notify:
+  description: | 
+    Takes gateway notification parameters as input, returns the CMF (common message format)
+    Scenario 1 use - if the gateway supports an http callback notification, implement that endpoint and pass the parameters to this endpoint
+    Scenario 2 use - if the gateway has to be polled for transation status, /CheckStatus is used and will pass the payload to this endpoint
+  post:
+    description: Parse notification parameters, map and publish to CMF queue, and return the CMF payload
+    body:
+      application/x-www-form-urlencoded:
+       example: |
+        {
+          "gatewayspecificfieldx": "x",
+          "gatewayspecificfieldy": "y",
+          "gatewayspecificfieldz": "z",
+          "payment_ccy": "USD",
+          "payment_amount": 73.57,
+          "etc": "etc..."
+        }
+    responses:
+      201:
+          description: ScalarReturn
+          body:
+           text/plain:
+            example: |
+                22bd8aaa8104eeaaf21138eddbd47738fe7cc519258f9a398fe20389dcc17579f1b7786698d6a210abdb533f61d90a7292db1a782cfd1338d6a17f8da445fd41
+
+                
+/Withdrawals:
+  post:
+    description: |
+      Process a list of withdrawal requests. 
+      Scenario 1 - Will iterate through each request and call the corresponding refund/payout or payout API
+      Scenario 2 - Return a gateway specific batch file (usually csv or xls). The file will be used to manually upload the requests to the gateway portal.
+    body:
+      schema: postWithdrawalsRequest
+      example: |
+          {
+            "WithdrawalRequests": [
+              {
+                 "WithdrawalId": 15164931122194,
+                 "LegalEntity": "Axicorp Limited",
+                 "ProviderDepositReference": "123xyz",
+                 "Currency": "GBP",
+                 "Amount": 10000000.00,
+                 "AdditionalInfo": {"ClientIp": "201.36.21.45","BankName": "Bank BRI","CardToken":"C58vIo0FlWWydf4","ClientAccountNumber": "1241414141"}
+              },
+              {
+                 "WithdrawalId": 151649311224578,
+                 "LegalEntity": "Axicorp Limited",
+                 "ProviderDepositReference": "124xyz",
+                 "Currency": "USD",
+                 "Amount": 300.00,
+                 "AdditionalInfo": {"ClientIp": "201.36.21.45","BankName": "Hong Leong","CardToken":"C58vIo0FlWWydf4","ClientAccountNumber": "1241414141"}
+              }
+            ]
+          }
+          
+    responses:
+      201:
+          body:
+            schema: ScalarReturn
+            example: |
+              {                      
+                "ReturnValue": "Queued",                  
+                "Message": "DEV.q.paysafe.withdrawal.request.v1"  
+              } 
+  /CheckStatus:
+    description: |
+       Request to get the status of one or more pending deposits. Return the status of all deposits 
+       and also call PaymentNotificationToCmf() for any approved or declined results.
+    post:
+     description: checkstatus method
+     body:
+      schema: checkStatusRequest
+      example: |
+         [
+          {
+            "WithdrawalId" : 7220,
+            "MerchantReference" : "7220",
+            "ProviderReference" : "53ec124d-ae0d-41e1-88d7-b6ceaa9f278b",
+            "LegalEntity": "Axicorp Ltd",
+            "Currency": "GBP"
+          }
+         ]
+     responses:
+       201:
+           description: CheckStatus Response
+           body:
+              schema: ScalarReturn
+              example: |
+                {         
+                  "ReturnValue": "Queued",        
+                  "Message": "DEV.q.Paysafe.withdrawal.request.v1"    
+                }

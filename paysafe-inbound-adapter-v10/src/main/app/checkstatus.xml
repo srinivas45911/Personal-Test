@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+    <flow name="checkstatusFlow">
+        <logger message="#['Request Header \n http.request.uri = ' +message.inboundProperties.'http.request.uri'+  '\n content-length = '+message.inboundProperties.'content-length' +  '\n http.query.string = '+message.inboundProperties.'http.query.string'+  '\n accept-language = '+message.inboundProperties.'accept-language'+  '\n postman-token = '+message.inboundProperties.'postman-token'+  '\n http.query.params = '+message.inboundProperties.'http.query.params'+  '\n http.listener.path = '+message.inboundProperties.'http.listener.path'+  '\n http.uri.params = '+message.inboundProperties.'http.uri.params'+  '\n host = '+message.inboundProperties.'host'+  '\n content-type = '+message.inboundProperties.'content-type'+  '\n http.method = '+message.inboundProperties.'http.method'+  '\n caccept-encoding = '+message.inboundProperties.'accept-encoding'+  '\n http.relative.path = '+message.inboundProperties.'http.relative.path'+  '\n http.request.path = '+message.inboundProperties.'http.request.path']   #['\n \n Request Payload is :  \n' +message.payloadAs(java.lang.String)]" level="INFO" category="Paysafe Withdrawal CheckStatus | Request Payload" doc:name="Checkstatus Request Payload" doc:description="Checkstatus Request Paylaod Logger"/>
+        <json:json-to-object-transformer returnClass="java.util.ArrayList" doc:name="JSON to Object"/>
+        <foreach doc:name="For Each" doc:description="Iterating arraylist and processing the request for the Get Standloane Credit API">
+            <logger message="#[payload]" level="INFO" category="Paysafe Withdrawal CheckStatus | CheckStatus Request" doc:name="CheckStatus Request" doc:description="Checkstatus Request payload Logger"/>
+            <set-variable variableName="requestMap" value="#[payload]" doc:name="Set requestMap" doc:description="Storing incoming request payload"/>
+            <scripting:transformer doc:name="Get Authorization and AccountId" doc:description="Groovy logic for Account_Id and Apikey and Incoming uri params">
+                <scripting:script engine="Groovy"><![CDATA[def request_Payload=payload //(see example in notes)
+String legalEntity =request_Payload.LegalEntity
+String currency=request_Payload.Currency
+new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+]]></scripting:script>
+            </scripting:transformer>
+            <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Paysafe Withdrawal CheckStatus || Payload  to Standalone Credit API" doc:name="CheckStatus Payload  to Standalone Credit API" doc:description="Request payload to standloane Credit Api Logger"/>
+            <http:request config-ref="HTTP_Paysafe_API_Configuration" path="cardpayments/v1/accounts/{ACCOUNT_ID}/standalonecredits/{STANDALONE_CREDIT_ID}" method="GET" doc:name="GET Standalone Credit API" doc:description="Call to GET Standlone Credit API">
+                <http:request-builder>
+                    <http:uri-param paramName="ACCOUNT_ID" value="#[flowVars.Account_Id]"/>
+                    <http:uri-param paramName="STANDALONE_CREDIT_ID" value="#[flowVars.requestMap.ProviderReference]"/>
+                    <http:header headerName="Content-Type" value="application/json"/>
+                    <http:header headerName="Authorization" value="#[flowVars.Apikey]"/>
+                </http:request-builder>
+                <http:success-status-code-validator values="200..500"/>
+            </http:request>
+            <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Paysafe Withdrawal CheckStatus || Payload from Standalone Credit API" doc:name="CheckStatus Payload from Standalone Credit API" doc:description="Response payload from standloane Credit API"/>
+            <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+            <scripting:transformer doc:name="Transform to CheckStatus Response" doc:description="Input to Groovy:
+{&quot;links&quot;:[{&quot;rel&quot;:&quot;self&quot;,&quot;href&quot;:&quot;https://api.test.paysafe.com/cardpayments/v1/accounts/1001218660/standalonecredits/53ec124d-ae0d-41e1-88d7-b6ceaa9f278b&quot;}],&quot;id&quot;:&quot;53ec124d-ae0d-41e1-88d7-b6ceaa9f278b&quot;,&quot;merchantRefNum&quot;:&quot;merchant ABC-12132131677&quot;,&quot;txnTime&quot;:&quot;2018-06-13T10:34:50Z&quot;,&quot;status&quot;:&quot;COMPLETED&quot;,&quot;amount&quot;:1000,&quot;card&quot;:{&quot;type&quot;:&quot;VI&quot;,&quot;lastDigits&quot;:&quot;0004&quot;,&quot;cardExpiry&quot;:{&quot;month&quot;:2,&quot;year&quot;:2022}},&quot;profile&quot;:{&quot;firstName&quot;:&quot;JAMES&quot;,&quot;lastName&quot;:&quot;SMITH&quot;,&quot;email&quot;:&quot;JOHN.SMITH@EMAIL.COM&quot;},&quot;customerIp&quot;:&quot;204.91.0.12&quot;,&quot;description&quot;:&quot;Winning payment from Loto&quot;,&quot;currencyCode&quot;:&quot;GBP&quot;}
+Output from Groovy:
+{&quot;WithdrawalId&quot;:&quot;merchant ABC-12132131677&quot;,&quot;ProviderReference&quot;:&quot;53ec124d-ae0d-41e1-88d7-b6ceaa9f278b&quot;,&quot;ProviderDepositReference&quot;:&quot;&quot;,&quot;Status&quot;:&quot;SENT&quot;,&quot;Message&quot;:&quot;&quot;,&quot;GatewayResponseCode&quot;:&quot;&quot;,&quot;GatewayResponseMessage&quot;:&quot;COMPLETED&quot;}
+">
+                <scripting:script engine="Groovy"><![CDATA[def input_Payload=payload //(see example in notes)
+def status = input_Payload.status
+def withdrawalCheckstatus_Response
+def gatewayResponseCode
+def gatewayResponseMessage
+if(input_Payload.status == "COMPLETED")
+{
+       status= "SENT"
+       gatewayResponseCode = ""
+       gatewayResponseMessage = "COMPLETED"
+}
+else if(input_Payload.status == "PENDING")
+{
+       gatewayResponseCode = ""
+       gatewayResponseMessage = "PENDING"
+}
+else
+{
+       gatewayResponseCode = input_Payload.error.code
+       gatewayResponseMessage = input_Payload.error.message
+}
+withdrawalCheckstatus_Response =[ 
+                           WithdrawalId: input_Payload.merchantRefNum, 
+                           ProviderReference: input_Payload.id, 
+                           ProviderDepositReference:"", 
+                           Status:status, 
+                           Message:"", 
+                           GatewayResponseCode: gatewayResponseCode, 
+                           GatewayResponseMessage: gatewayResponseMessage 
+                     ]
+message.setInvocationProperty('status',status)
+return withdrawalCheckstatus_Response
+]]></scripting:script>
+            </scripting:transformer>
+            <json:object-to-json-transformer doc:name="Object to JSON"/>
+            <choice doc:name="Choice">
+                <when expression="#[(flowVars.status=='SENT')||(flowVars.status=='FAILED')]">
+                    <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Paysafe Withdrawal CheckStatus | Response to Queue" doc:name="Response  payload to Queue" doc:description="Transformation Response payload Logger"/>
+                    <jms:outbound-endpoint queue="${gateway.withdrawal.outbound.queue}" connector-ref="Active_MQ" doc:name="Withdrawals checkstatus Update Queue" doc:description="Storing response payload to Withdrawals Checkstatus Update Queue"/>
+                </when>
+                <otherwise>
+                    <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Paysafe Withdrawal CheckStatus | Pending Response" doc:name="Pending Response Payload" doc:description="Response Pending payload Logger"/>
+                </otherwise>
+            </choice>
+        </foreach>
+        <set-payload value="{  &quot;ReturnValue&quot;: &quot;Queued&quot;,  &quot;Message&quot;: &quot;${gateway.withdrawal.outbound.queue}&quot; }" doc:name="Scalar Paylaod" doc:description="Scalar message: Checkstatus  Response queued"/>
+        <logger message="#[payload]" level="INFO" category="Paysafe Withdrawal CheckStatus | Scalar Response Payload" doc:name="Scalar Response" doc:description="Scalar Response payload Logger"/>
+    </flow>
+</mule>

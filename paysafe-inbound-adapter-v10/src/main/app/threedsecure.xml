@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+    <flow name="authenticationsFlow">
+        <logger message="#['Request Header \n http.request.uri = ' +message.inboundProperties.'http.request.uri'+  '\n content-length = '+message.inboundProperties.'content-length' +  '\n http.query.string = '+message.inboundProperties.'http.query.string'+  '\n accept-language = '+message.inboundProperties.'accept-language'+  '\n postman-token = '+message.inboundProperties.'postman-token'+  '\n http.query.params = '+message.inboundProperties.'http.query.params'+  '\n http.listener.path = '+message.inboundProperties.'http.listener.path'+  '\n http.uri.params = '+message.inboundProperties.'http.uri.params'+  '\n host = '+message.inboundProperties.'host'+  '\n content-type = '+message.inboundProperties.'content-type'+  '\n http.method = '+message.inboundProperties.'http.method'+  '\n caccept-encoding = '+message.inboundProperties.'accept-encoding'+  '\n http.relative.path = '+message.inboundProperties.'http.relative.path'+  '\n http.request.path = '+message.inboundProperties.'http.request.path']  #['\n \n Request Payload is :  \n' +message.payloadAs(java.lang.String)]" level="INFO" category="Paysafe Authentications | Request Payload" doc:name="Authentications Request Payload" doc:description="Authentications Request Payload Logger"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <set-variable variableName="requestMap" value="#[payload]" doc:name="Set Request Message" doc:description="Setting variable for Authentications Request Payload"/>
+        <scripting:transformer doc:name="Transform to Authentications Request" doc:description="Request Example: Authentication Request: { &quot;EnrollmentLookupId&quot;: &quot;d8968ae4-07b8-4725-89ba-557c5bf2f62c&quot;,&quot;ClientId&quot;: &quot;058698&quot;,&quot;MerchantReference&quot;: &quot;123456&quot;,&quot;Currency&quot;: &quot;GBP&quot;,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;CardToken&quot;: &quot;sfghddasgh&quot;,&quot;PayAuthResp&quot;:&quot;eJzNWFmTm0qy/isOz6PCZhWgE3JPsIPYBGJ/OcEmNrGIRSy...,&quot;AdditionalInfo&quot;: {}           } ">
+            <scripting:script engine="Groovy"><![CDATA[def authentications_Request
+def request_Payload=payload //(see example in notes)
+String legalEntity =request_Payload.LegalEntity
+String currency=request_Payload.Currency
+def apikeyconfig= new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+authentications_Request =[ \
+								merchantRefNum: request_Payload.MerchantReference, \
+								paRes:request_Payload.PayAuthResp \
+								]
+     
+return authentications_Request]]></scripting:script>
+        </scripting:transformer>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Authentications || Request  Payload to Authentications API" doc:name="Request Payload to Authentications API" doc:description="Request Payload to Authentications API Logger"/>
+        <http:request config-ref="HTTP_Paysafe_API_Configuration" path="threedsecure/v1/accounts/{ACCOUNT_ID}/enrollmentchecks/{ENROLLMENT_ID}/authentications" method="POST" doc:name="Authentications API" doc:description="Call to Authentications API">
+            <http:request-builder>
+                <http:uri-param paramName="Content-Type" value="application/json"/>
+                <http:uri-param paramName="ACCOUNT_ID" value="#[flowVars.Account_Id]"/>
+                <http:uri-param paramName="ENROLLMENT_ID" value="#[flowVars.requestMap.EnrollmentLookupId]"/>
+                <http:header headerName="Authorization" value="#[flowVars.Apikey]"/>
+
+            </http:request-builder>
+        </http:request>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Authentications || Response  Payload from Authentications API" doc:name="Response Payload from Authentications API" doc:description="Response Payload from Authentications API Logger"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <scripting:transformer doc:name="Transform to Authentications Response" doc:description="Output from Groovy:{
+&quot;AuthenticationId&quot;: &quot;2a00c3e5-61e7-4bba-88ff-29ce8e996ddc&quot;,&quot;MerchantReference&quot;: &quot;123456&quot;, &quot;GatewayResponseCode&quot;: &quot;&quot;,
+   &quot;GatewayResponseMessage&quot;: &quot;&quot;, &quot;Result&quot;: &quot;Y&quot;,&quot;ECI&quot;: 5,&quot;CAVV&quot;: &quot;MjAgY2hhcmFjdGVyIG1lc3NhZ2U=&quot;, &quot;AdditionalInfo&quot;: {&quot;Status&quot;: &quot;true&quot;,&quot;SignatureStatus&quot;: &quot;Y&quot;,  &quot;XID&quot;: &quot;Y2Jnc3ZybXQwMSAgB4gOWwxVAAA=&quot; }}">
+            <scripting:script engine="Groovy"><![CDATA[def input_Payload=payload //(see example in notes)
+def status= "false"
+
+if(input_Payload.status.equalsIgnoreCase("COMPLETED"))
+{
+	status= "true"
+}
+
+def authentications_Response =[ \
+				AuthenticationId: input_Payload.id, \
+				MerchantReference:input_Payload.merchantRefNum, \
+				GatewayResponseCode: "", \
+                GatewayResponseMessage: "", \
+				Result: input_Payload.threeDResult, \
+				ECI:input_Payload.eci, \
+				CAVV:input_Payload.cavv, \
+				AdditionalInfo:	   [ \
+					Status:status, \
+					SignatureStatus:input_Payload.signatureStatus, \
+					XID:input_Payload.xid \
+				] \
+			]
+return authentications_Response
+]]></scripting:script>
+        </scripting:transformer>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <logger message="#[payload]" level="INFO" category="Paysafe Authentications | Response Payload" doc:name="Authentications Response Payload" doc:description="Authentications Response Payload Logger"/>
+    </flow>
+    <flow name="enrollment-lookupFlow">
+        <logger message="#['Request Header \n http.request.uri = ' +message.inboundProperties.'http.request.uri'+  '\n content-length = '+message.inboundProperties.'content-length' +  '\n http.query.string = '+message.inboundProperties.'http.query.string'+  '\n accept-language = '+message.inboundProperties.'accept-language'+  '\n postman-token = '+message.inboundProperties.'postman-token'+  '\n http.query.params = '+message.inboundProperties.'http.query.params'+  '\n http.listener.path = '+message.inboundProperties.'http.listener.path'+  '\n http.uri.params = '+message.inboundProperties.'http.uri.params'+  '\n host = '+message.inboundProperties.'host'+  '\n content-type = '+message.inboundProperties.'content-type'+  '\n http.method = '+message.inboundProperties.'http.method'+  '\n caccept-encoding = '+message.inboundProperties.'accept-encoding'+  '\n http.relative.path = '+message.inboundProperties.'http.relative.path'+  '\n http.request.path = '+message.inboundProperties.'http.request.path']  #['\n \n Request Payload is :  \n' +message.payloadAs(java.lang.String)]" level="INFO" category="Paysafe Enrollment Lookup | Request Payload" doc:name="Enrollment Lookup Request Payload" doc:description="Enrollment Lookup Request Payload Logger"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <scripting:transformer doc:name="Transform to Enrollment Lookup Request" doc:description="Request Example: Authentication Request:{&quot;OrderId&quot;: 123456,  &quot;ClientId&quot;: &quot;058698&quot;,&quot;Amount&quot;: 5000.78, &quot;Currency&quot;: &quot;GBP&quot;,      &quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,    &quot;CardToken&quot;: &quot;ClknqYzUNIzF9WF&quot;, &quot;AdditionalInfo&quot;: {  &quot;CustomerIp&quot;: &quot;112.112.112.112&quot;,              &quot;UserAgent&quot;: &quot;Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.125 Safari/537.36&quot;, &quot;SourceUrl&quot;: &quot;https://clientportal.axicorp.com/somepage.aspx&quot;  }}  ">
+            <scripting:script engine="Groovy"><![CDATA[import java.util.Date
+
+def request_Payload=payload //(see example in notes)
+def enrollment_Lookup_Request
+String amount= (request_Payload.Amount).toString()
+String currentTimeUTCVar = new Date().format("yyyyMMddHHmmss", TimeZone.getTimeZone('UTC'))
+amount= new ConvertAmount().getAmount(amount,request_Payload.Currency)
+String legalEntity =request_Payload.LegalEntity
+String currency=request_Payload.Currency
+def apikeyconfig= new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+def merchantNum = request_Payload.ClientId+currentTimeUTCVar
+message.setInvocationProperty('merchantNumber',merchantNum)
+enrollment_Lookup_Request =[ \
+					merchantRefNum: merchantNum, \
+					amount:amount.toInteger(), \
+					currency:request_Payload.Currency, \
+					customerIp:request_Payload.AdditionalInfo.CustomerIp, \
+					userAgent:request_Payload.AdditionalInfo.UserAgent, \
+					merchantUrl:request_Payload.AdditionalInfo.SourceUrl, \
+					card:   [ \
+						paymentToken:request_Payload.CardToken \
+							] \
+						]	
+     
+return enrollment_Lookup_Request]]></scripting:script>
+        </scripting:transformer>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Enrollment Lookup || Request  Payload to Enrollment Lookup API" doc:name="Request  Payload to Enrollment Lookup API" doc:description="Request  Payload to Enrollment Lookup API Logger"/>
+        <http:request config-ref="HTTP_Paysafe_API_Configuration" path="threedsecure/v1/accounts/{ACCOUNT_ID}/enrollmentchecks" method="POST" doc:name="Enrollment Lookup API" doc:description="Call to Enrollment Lookup API">
+            <http:request-builder>
+                <http:uri-param paramName="ACCOUNT_ID" value="#[flowVars.Account_Id]"/>
+                <http:header headerName="Authorization" value="#[flowVars.ApiKey]"/>
+                <http:header headerName="Content-Type" value="application/json"/>
+
+
+            </http:request-builder>
+        </http:request>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Enrollment Lookup || Response Payload from Enrollment Lookup API" doc:name="Response Payload from Enrollment Lookup API" doc:description="Response Payload from Enrollment Lookup API Logger"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <scripting:transformer doc:name="Transform to Enrollment Lookup Response" doc:description="Output from Groovy:{    &quot;GatewayId&quot;: &quot;832aec0b-6998-4460-ab4c-c1e6cf9b8f27&quot;,
+    &quot;MerchantReference&quot;: &quot;05869820180621115033&quot;,
+    &quot;GatewayResponseCode&quot;: &quot;&quot;,
+    &quot;GatewayResponseMessage&quot;: &quot;&quot;,
+    &quot;AcsUrl&quot;: &quot;https://pay.test.netbanx.com/emulator/test_acs&quot;,
+    &quot;PayAuthReq&quot;: &quot;eJxVUttuwjAM/ZWJ9zWXttAiEwnGpDGJCcakbbygECyoRi+kgZW/n8NlbHny8YmP7ZPA28YiDmdo9hYVjLGu9RrvslWvZb+OPOCBWJjluj7Y3HGxELFM40QkMl0kaRLycBFGoqVg0n/FnYID2jorCyWoTgK7QpK1ZqMLp0Cb3WD0oqJUppwDu0DI0Y6Gqk3KaUSFZwiFzlGt8GCwcBbvqXmHh6EIOyJK2x1gJx5MuSf6qBLZBnYFsLdbtXGuqruMmW1GClVpnd4GuslMaavAlDmryxwr2jfQddUA8zXAbsNO9j6qqUeTrdSnfC5MOD8uP6bf41l/PZg/2nfpmuG03wPmb8BKO1SSi4S3pbgTohvzrkyBnfKgcz+cijnnQSeh5c8YKt+mfyM99zcH9DYWC3Nd8YoAm6osaDNFlv3GwG5jPzx5x40jM6NYxDwU/HJi7/2J8CoZOUZjn2U8AOZL2eVZ2eVbUPTvu/wAjWW6CA==&quot;,
+    &quot;ThreeDEnrolled&quot;: &quot;Y&quot;,
+    &quot;AdditionalInfo&quot;: []
+}">
+            <scripting:script engine="Groovy"><![CDATA[def input_Payload=payload //(see example in notes)
+
+def enrollment_Lookup_Response =[ \
+				GatewayId: input_Payload.id, \
+				MerchantReference:input_Payload.merchantRefNum, \
+				GatewayResponseCode: "", \
+                GatewayResponseMessage: "", \
+				AcsUrl: input_Payload.acsURL, \
+				PayAuthReq:input_Payload.paReq, \
+				ThreeDEnrolled:input_Payload.threeDEnrollment, \
+				AdditionalInfo:	   [] \
+			]
+return enrollment_Lookup_Response]]></scripting:script>
+        </scripting:transformer>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <logger message="#[payload]" level="INFO" category="Paysafe Enrollment Lookup | Response Payload" doc:name="Enrollment Lookup Response Payload" doc:description="Enrollment Lookup Response Payload Logger"/>
+    </flow>
+</mule>

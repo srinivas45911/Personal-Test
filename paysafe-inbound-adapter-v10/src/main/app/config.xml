@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:context="http://www.springframework.org/schema/context" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:util="http://www.springframework.org/schema/util"
+	xsi:schemaLocation="http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/ws http://www.mulesoft.org/schema/mule/ws/current/mule-ws.xsd
+http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+    <http:proxy name="ITCProxy_Configuration" host="10.6.13.87" port="8080" username="29191" password="Apr@2018" doc:name="Proxy Configuration"/>
+    <http:request-config name="HTTP_Paysafe_API_Configuration" protocol="HTTPS" host="${GatewaySvc.Host}" port="${GatewaySvc.Port}" basePath="${GatewaySvc.BasePath}"  doc:name="HTTP Request Configuration" proxy-ref="ITCProxy_Configuration"/>
+    <http:listener-config name="api-httpListenerConfig" host="localhost" port="${endpoint.port}" doc:name="HTTP Listener Configuration" basePath="${endpoint.path}"/>
+    <spring:beans>
+        <util:map id="merchant_information" map-class="java.util.HashMap" key-type="java.lang.String" value-type="java.lang.String">
+            <spring:entry key="GBP" value-ref="merchant_information_GBP"/>
+            <spring:entry key="EUR" value-ref="merchant_information_EUR"/> 
+           <spring:entry key="CAD" value-ref="merchant_information_CAD"/>
+           <spring:entry key="USD" value-ref="merchant_information_USD"/>
+        </util:map>
+        </spring:beans>
+        <spring:beans>
+        <util:map id="merchant_information_GBP" map-class="java.util.HashMap" key-type="java.lang.String" value-type="java.lang.String">
+            <spring:entry key="MerchantId" value="1001218660"/>
+            <spring:entry key="AccountName" value="Axicorp Limited"/>
+            <spring:entry key="Currency" value="GBP"/>
+            <spring:entry key="LegalEntity" value="Axicorp Limited"/>
+            <spring:entry key="PreAuthAmount" value="0.01"/>
+            <spring:entry key="APIKey" value="dGVzdF9heGljb3JwdGVzdDpCLXFhMi0wLTViMDRhZDM2LTAtMzAyYzAyMTQxMDQyMmJkZjAwOWE5NWI3MWU1MzMzOTIzMWU2MjBkYTdmNDgyN2M0MDIxNDIwNmZlNWI4NTgyZDQ2ZGUxOTE3YmZjMzZmYzRmZDUyYWQ4M2ZlZTU="/>
+        </util:map>
+        </spring:beans>
+        <spring:beans>
+        <util:map id="merchant_information_EUR" map-class="java.util.HashMap" key-type="java.lang.String" value-type="java.lang.String">
+        	<spring:entry key="MerchantId" value="1001219270"/>
+            <spring:entry key="AccountName" value="Axicorp Limited"/>
+            <spring:entry key="Currency" value="EUR"/>
+            <spring:entry key="LegalEntity" value="Axicorp Limited"/>
+            <spring:entry key="PreAuthAmount" value="0.01"/>
+            <spring:entry key="APIKey" value="dGVzdF9heGljb3JwdGVzdDpCLXFhMi0wLTViMDRhZDM2LTAtMzAyYzAyMTQxMDQyMmJkZjAwOWE5NWI3MWU1MzMzOTIzMWU2MjBkYTdmNDgyN2M0MDIxNDIwNmZlNWI4NTgyZDQ2ZGUxOTE3YmZjMzZmYzRmZDUyYWQ4M2ZlZTU="/>
+            </util:map>
+        </spring:beans>
+        <spring:beans>
+        <util:map id="merchant_information_CAD" map-class="java.util.HashMap" key-type="java.lang.String" value-type="java.lang.String">
+            <spring:entry key="MerchantId" value="1001220020"/>
+            <spring:entry key="AccountName" value="Axicorp Limited"/>
+            <spring:entry key="Currency" value="CAD"/>
+            <spring:entry key="LegalEntity" value="Axicorp Limited"/>
+            <spring:entry key="PreAuthAmount" value="0.01"/>
+            <spring:entry key="APIKey" value="dGVzdF9heGljb3JwdGVzdDpCLXFhMi0wLTViMDRhZDM2LTAtMzAyYzAyMTQxMDQyMmJkZjAwOWE5NWI3MWU1MzMzOTIzMWU2MjBkYTdmNDgyN2M0MDIxNDIwNmZlNWI4NTgyZDQ2ZGUxOTE3YmZjMzZmYzRmZDUyYWQ4M2ZlZTU="/>
+        </util:map>
+        </spring:beans>
+        <spring:beans>
+        <util:map id="merchant_information_USD" map-class="java.util.HashMap" key-type="java.lang.String" value-type="java.lang.String">
+            <spring:entry key="MerchantId" value="1001220030"/>
+            <spring:entry key="AccountName" value="Axicorp Limited"/>
+            <spring:entry key="Currency" value="USD"/>
+            <spring:entry key="LegalEntity" value="Axicorp Limited"/>
+            <spring:entry key="PreAuthAmount" value="0.01"/>
+            <spring:entry key="APIKey" value="dGVzdF9heGljb3JwdGVzdDpCLXFhMi0wLTViMDRhZDM2LTAtMzAyYzAyMTQxMDQyMmJkZjAwOWE5NWI3MWU1MzMzOTIzMWU2MjBkYTdmNDgyN2M0MDIxNDIwNmZlNWI4NTgyZDQ2ZGUxOTE3YmZjMzZmYzRmZDUyYWQ4M2ZlZTU="/>
+        </util:map>
+        </spring:beans>
+        <spring:beans>
+        <util:map id="CardInformation" map-class="java.util.HashMap" key-type="java.lang.String" value-type="java.lang.String">
+            <spring:entry key="VI" value="Visa"/>
+            <spring:entry key="VD" value="Visa Debit"/>
+            <spring:entry key="VE" value="Visa Electron"/>
+            <spring:entry key="MC" value="Mastercard"/>
+            <spring:entry key="MD" value="Maestro"/>
+            <spring:entry key="AM" value="American Express"/>
+            <spring:entry key="DC" value="Discover"/>
+			<spring:entry key="JC" value="JCB"/>
+        </util:map>
+        </spring:beans>
+        <spring:beans>
+        <util:map id="CardIsDebit" map-class="java.util.HashMap" key-type="java.lang.String" value-type="java.lang.String">
+            <spring:entry key="Visa" value="false"/>
+            <spring:entry key="Visa Electron" value="true"/>
+            <spring:entry key="Visa Debit" value="true"/>
+            <spring:entry key="Mastercard" value="false"/>
+            <spring:entry key="Maestro" value="true"/>
+            <spring:entry key="American Express" value="false"/>
+            <spring:entry key="Discover" value="false"/>
+			<spring:entry key="JCB" value="false"/>
+        </util:map>
+        </spring:beans>
+    <context:property-placeholder location="classpath:paysafe-inbound-adapter.properties,classpath:domain.properties,classpath:ConvertAmount.groovy,classpath:ClientTokenDetails.groovy"/>
+    <jms:activemq-connector name="Active_MQ" username="${async.jms.user}" password="${async.jms.password}" brokerURL="${async.jms.brokerURL}" validateConnections="true" doc:name="Active MQ"/>
+    
+</mule>

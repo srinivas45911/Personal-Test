@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  	xmlns:mock="http://www.mulesoft.org/schema/mule/mock" 
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd">
+  <munit:config name="munit" mock-connectors="false" mock-inbounds="false" doc:name="MUnit configuration"/>
+    <spring:beans>
+        <spring:import resource="classpath:api.xml"/>
+        <spring:import resource="classpath:clienttoken.xml"/>
+        <spring:import resource="classpath:config.xml"/>
+        <spring:import resource="classpath:deposits.xml"/>
+        <spring:import resource="classpath:threedsecure.xml"/>
+        <spring:import resource="classpath:instrument.xml"/>
+        <spring:import resource="classpath:checkstatus.xml"/>
+        <spring:import resource="classpath:error-handler.xml"/>
+        <spring:import resource="classpath:withdrawals.xml"/>
+
+    </spring:beans>
+    
+    <munit:test name="EnrollmentLookupFlow-TestCase1(SuccessScenariofor3DEnrolled=Y)" description="Verifying EnrollmentLookup flow with test request for success scenario" >
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Enrollment Lookup API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Enrollment Lookup API']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['{&quot;acsURL&quot;:&quot;https://pay.test.netbanx.com/emulator/test_acs&quot;,&quot;amount&quot;:5000,&quot;card&quot;:{&quot;cardExpiry&quot;:{&quot;month&quot;:9,&quot;year&quot;:2021},&quot;cardType&quot;:&quot;VI&quot;,&quot;lastDigits&quot;:&quot;0007&quot;,&quot;type&quot;:&quot;VI&quot;},&quot;currency&quot;:&quot;GBP&quot;,&quot;customerIp&quot;:&quot;119.226.211.80&quot;,&quot;id&quot;:&quot;963d102e-0e4e-435a-a410-38c43f26b225&quot;,&quot;links&quot;:[{&quot;href&quot;:&quot;https://test_axicorptest:B-qa2-0-5b04ad36-0-302c021410422bdf009a95b71e53339231e620da7f4827c40214206fe5b8582d46de1917bfc36fc4fd52ad83fee5@api.test.paysafe.com/threedsecure/v1/accounts/1001218660/enrollmentchecks/963d102e-0e4e-435a-a410-38c43f26b225&quot;,&quot;rel&quot;:&quot;self&quot;}],&quot;merchantRefNum&quot;:&quot;merchant-ABC-445&quot;,&quot;paReq&quot;:&quot;eJxVUstuwjAQ/JWKe2M7zhMtlkI5QCUqKFVflyg4qxC1ScBJCPx9bUhK64O14/HujmcNLzuFONugbBUKWGJdJxne5elkpL7O1KIWi+U2q4+qaCiLmWsHjHFOw5hxpuOY+3QkYBU940HAEVWdV6VgOs8GMkBdVsldUjYCEnmYLp6EE9ohpUB6CAWqxUx4AQtCRydeIZRJgSLFo8SyUXivm/uUc8Z95oSeD+TCg6xaTZ9FYHtABgCt+ha7ptnXY0K6rrOKXoIlqwKIYYHcZK1aE9W62ilPxYf9WEr+ed6+r7vlJsrKTfb6dppPo3U0AWJuQJo0KGzKAupR546xseuOaQjkcg5JYWQIV/tnHnlFsDdNooEyzN8T0BNQWMrhIQMCPO2rUjsgtDG/MZCb5Ie58VU22jKHUu7orV++cfhCmCq59sVmRmUPgJhU0g+P9MPX0b9P8QNl3LBn&quot;,&quot;status&quot;:&quot;COMPLETED&quot;,&quot;threeDEnrollment&quot;:&quot;Y&quot;,&quot;txnTime&quot;:&quot;2018-06-04T11:55:09Z&quot;}']"/>
+        </mock:when>
+        <munit:set payload="#['{&quot;OrderId&quot;:123456,&quot;ClientId&quot;:&quot;058698&quot;,&quot;Amount&quot;:5000,&quot;Currency&quot;:&quot;GBP&quot;,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;CardToken&quot;:&quot;ClknqYzUNIzF9WF&quot;,&quot;AdditionalInfo&quot;:{&quot;CustomerIp&quot;:&quot;248.234.32.234&quot;,&quot;UserAgent&quot;:&quot;Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.125 Safari/537.36&quot;,&quot;SourceUrl&quot;:&quot;https://clientportal.axicorp.com/somepage.aspx&quot;}}']" doc:name=" Set Request Payload"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#['Request Payload \n OrderId : '+payload.OrderId+'\n ClientId : '+payload.ClientId+'\n Amount : '+payload.Amount+'\n Currency : '+payload.Currency+'\n LegalEntity : '+payload.LegalEntity+'\n CardToken : '+payload.CardToken+'\n']" level="INFO" doc:name="Request Payload" category="MUnit Test || EnrollmentLookupFlow-TestCase1(SuccessScenariofor3DEnrolled=Y)"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <flow-ref name="enrollment-lookupFlow" doc:name="Flow-ref to enrollment-lookupFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#['Response Payload \n GatewayId : '+payload.GatewayId+'\n MerchantReference : '+payload.MerchantReference+'\n AcsUrl : '+payload.AcsUrl+'\n PayAuthReq : '+payload.PayAuthReq+'\n ThreeDEnrolled : '+payload.ThreeDEnrolled+' \n Gateway Response Message : '+payload.GatewayResponseMessage+' \n Gateway Response Code : '+payload.GatewayResponseCode+'\n']" level="INFO" doc:name="Response Payload" category="MUnit Test || EnrollmentLookupFlow-TestCase1(SuccessScenariofor3DEnrolled=Y)"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <munit:assert-on-equals expectedValue="#['{&quot;PayAuthReq&quot;:&quot;eJxVUstuwjAQ/JWKe2M7zhMtlkI5QCUqKFVflyg4qxC1ScBJCPx9bUhK64O14/HujmcNLzuFONugbBUKWGJdJxne5elkpL7O1KIWi+U2q4+qaCiLmWsHjHFOw5hxpuOY+3QkYBU940HAEVWdV6VgOs8GMkBdVsldUjYCEnmYLp6EE9ohpUB6CAWqxUx4AQtCRydeIZRJgSLFo8SyUXivm/uUc8Z95oSeD+TCg6xaTZ9FYHtABgCt+ha7ptnXY0K6rrOKXoIlqwKIYYHcZK1aE9W62ilPxYf9WEr+ed6+r7vlJsrKTfb6dppPo3U0AWJuQJo0KGzKAupR546xseuOaQjkcg5JYWQIV/tnHnlFsDdNooEyzN8T0BNQWMrhIQMCPO2rUjsgtDG/MZCb5Ie58VU22jKHUu7orV++cfhCmCq59sVmRmUPgJhU0g+P9MPX0b9P8QNl3LBn&quot;,&quot;MerchantReference&quot;:&quot;merchant-ABC-445&quot;,&quot;AdditionalInfo&quot;:[],&quot;GatewayResponseMessage&quot;:&quot;&quot;,&quot;GatewayId&quot;:&quot;963d102e-0e4e-435a-a410-38c43f26b225&quot;,&quot;GatewayResponseCode&quot;:&quot;&quot;,&quot;AcsUrl&quot;:&quot;https://pay.test.netbanx.com/emulator/test_acs&quot;,&quot;ThreeDEnrolled&quot;:&quot;Y&quot;}']" actualValue="#[payload]" doc:name="Check Response Payload" message="Response message is not valid as expected"/>
+    </munit:test>
+    <munit:test name="EnrollmentLookupFlow-TestCase2(FailureScenariofor3DEnrolled=N)" description="Verifying EnrollmentLookup flow with test request having invalid field  for failure scenario" >
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Enrollment Lookup API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Enrollment Lookup API']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['{&quot;amount&quot;:5000,&quot;card&quot;:{&quot;cardExpiry&quot;:{&quot;month&quot;:12,&quot;year&quot;:2020},&quot;cardType&quot;:&quot;VI&quot;,&quot;lastDigits&quot;:&quot;2345&quot;,&quot;type&quot;:&quot;VI&quot;},&quot;currency&quot;:&quot;GBP&quot;,&quot;customerIp&quot;:&quot;119.226.211.80&quot;,&quot;eci&quot;:6,&quot;id&quot;:&quot;41b1e6db-82f3-456c-8ad2-194acd748279&quot;,&quot;links&quot;:[{&quot;href&quot;:&quot;https://test_axicorptest:B-qa2-0-5b04ad36-0-302c021410422bdf009a95b71e53339231e620da7f4827c40214206fe5b8582d46de1917bfc36fc4fd52ad83fee5@api.test.paysafe.com/threedsecure/v1/accounts/1001218660/enrollmentchecks/41b1e6db-82f3-456c-8ad2-194acd748279&quot;,&quot;rel&quot;:&quot;self&quot;}],&quot;merchantRefNum&quot;:&quot;merchantABC-123-enrollmentchecks&quot;,&quot;status&quot;:&quot;COMPLETED&quot;,&quot;threeDEnrollment&quot;:&quot;N&quot;,&quot;txnTime&quot;:&quot;2018-05-29T10:55:45Z&quot;}']"/>
+        </mock:when>
+        <munit:set payload="#['{&quot;OrderId&quot;:321456,&quot;ClientId&quot;:&quot;058699&quot;,&quot;Amount&quot;:5000,&quot;Currency&quot;:&quot;GBP&quot;,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;CardToken&quot;:&quot;C58vIo0FlWWydf4&quot;,&quot;AdditionalInfo&quot;:{&quot;CustomerIp&quot;:&quot;248.234.32.234&quot;,&quot;UserAgent&quot;:&quot;Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.125 Safari/537.36&quot;,&quot;SourceUrl&quot;:&quot;https://clientportal.axicorp.com/somepage.aspx&quot;}}']" doc:name=" Set Request Payload"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#['Request Payload \n OrderId : '+payload.OrderId+'\n ClientId : '+payload.ClientId+'\n Amount : '+payload.Amount+'\n Currency : '+payload.Currency+'\n LegalEntity : '+payload.LegalEntity+'\n CardToken : '+payload.CardToken+'\n']" level="INFO" category="MUnit Test || EnrollmentLookupFlow-TestCase2(FailureScenariofor3DEnrolled=N)" doc:name="Request Payload"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <flow-ref name="enrollment-lookupFlow" doc:name="Flow-ref to enrollment-lookupFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#['Response Payload \n GatewayId : '+payload.GatewayId+'\n MerchantReference : '+payload.MerchantReference+'\n AcsUrl : '+payload.AcsUrl+'\n PayAuthReq : '+payload.PayAuthReq+'\n ThreeDEnrolled : '+payload.ThreeDEnrolled+' \n Gateway Response Message : '+payload.GatewayResponseMessage+' \n Gateway Response Code : '+payload.GatewayResponseCode+'\n']" level="INFO" category="MUnit Test || EnrollmentLookupFlow-TestCase2(FailureScenariofor3DEnrolled=N)" doc:name="Response Payload"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <munit:assert-on-equals expectedValue="#['{&quot;PayAuthReq&quot;:null,&quot;MerchantReference&quot;:&quot;merchantABC-123-enrollmentchecks&quot;,&quot;AdditionalInfo&quot;:[],&quot;GatewayResponseMessage&quot;:&quot;&quot;,&quot;GatewayId&quot;:&quot;41b1e6db-82f3-456c-8ad2-194acd748279&quot;,&quot;GatewayResponseCode&quot;:&quot;&quot;,&quot;AcsUrl&quot;:null,&quot;ThreeDEnrolled&quot;:&quot;N&quot;}']" actualValue="#[payload]" doc:name="Check Response Payload" message="Response message is not valid as expected"/>
+    </munit:test>
+    
+    <munit:test name="EnrollmentLookupFlow-TestCase3(FailureScenarioForCardToken)" description="Verifying EnrollmentLookup flow with test request having incorrect Card Token Field.">
+        <munit:set payload="#['{&quot;OrderId&quot;:123456,&quot;ClientId&quot;:&quot;058698&quot;,&quot;Amount&quot;:5000,&quot;Currency&quot;:&quot;GBP&quot;,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;CardToken&quot;:&quot;ClknqYzUNIzF9WG&quot;,&quot;AdditionalInfo&quot;:{&quot;CustomerIp&quot;:&quot;248.234.32.234&quot;,&quot;UserAgent&quot;:&quot;Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.125 Safari/537.36&quot;,&quot;SourceUrl&quot;:&quot;https://clientportal.axicorp.com/somepage.aspx&quot;}}']" doc:name=" Set Request Payload"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#['Request Payload \n OrderId : '+payload.OrderId+'\n ClientId : '+payload.ClientId+'\n Amount : '+payload.Amount+'\n Currency : '+payload.Currency+'\n LegalEntity : '+payload.LegalEntity+'\n CardToken : '+payload.CardToken+'\n']" level="INFO" category="MUnit Test || EnrollmentLookupFlow-TestCase3(FailureScenarioForCardToken)" doc:name="Request Payload"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <flow-ref name="enrollment-lookupFlow" doc:name="Flow-ref to enrollment-lookupFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#['Response Payload \n GatewayId : '+payload.GatewayId+'\n MerchantReference : '+payload.MerchantReference+'\n AcsUrl : '+payload.AcsUrl+'\n PayAuthReq : '+payload.PayAuthReq+'\n ThreeDEnrolled : '+payload.ThreeDEnrolled+' \n Gateway Response Message : '+payload.GatewayResponseMessage+' \n Gateway Response Code : '+payload.GatewayResponseCode+'\n']" level="INFO" category="MUnit Test || EnrollmentLookupFlow-TestCase3(FailureScenarioForCardToken)" doc:name="Response Payload"/>
+        <munit:assert-on-equals message="Response message is not valid as expected" expectedValue="#['5269']" actualValue="#[payload.GatewayResponseCode]" doc:name="Check Response Payload"/>
+    </munit:test>
+    
+</mule>

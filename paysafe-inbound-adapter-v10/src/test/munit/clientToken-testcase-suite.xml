@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  	xmlns:mock="http://www.mulesoft.org/schema/mule/mock" 
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd">
+    <munit:config name="munit" mock-connectors="false" mock-inbounds="false" doc:name="MUnit configuration"/>
+    <spring:beans>
+        <spring:import resource="classpath:api.xml"/>
+        <spring:import resource="classpath:clienttoken.xml"/>
+        <spring:import resource="classpath:config.xml"/>
+        <spring:import resource="classpath:deposits.xml"/>
+        <spring:import resource="classpath:threedsecure.xml"/>
+        <spring:import resource="classpath:instrument.xml"/>
+        <spring:import resource="classpath:checkstatus.xml"/>
+        <spring:import resource="classpath:error-handler.xml"/>
+        <spring:import resource="classpath:withdrawals.xml"/>
+
+    </spring:beans>
+    <munit:test name="ClientTokenFlow-TestCase1(SuccessScenarioForCurrencyEUR)" description="Verifying GetClientToken flow with test request for success scenario.">
+        <munit:set payload="#[]" doc:name="Set Request Payload">
+            <munit:inbound-properties>
+                <munit:inbound-property key="http.query.params" value="#[{&quot;Currency&quot;:&quot;EUR&quot;,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;}]"/>
+            </munit:inbound-properties>
+        </munit:set>
+        <logger message="#[' Request Payload \n '+message.inboundProperties.'http.query.params'+'\n']" level="INFO" category="MUnit Test || ClientTokenFlow-TestCase1(SuccessScenarioForCurrencyEUR)" doc:name="Request Payload"/>
+        <flow-ref name="client-tokenFlow" doc:name="Flow-ref to client-tokenFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#['Response Payload \n Api_key : '+payload.Api_key+'\n MerchantID : '+payload.MerchantID+'\n']" level="INFO" category="MUnit Test || ClientTokenFlow-TestCase1(SuccessScenarioForCurrencyEUR)" doc:name="Response Payload"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <munit:assert-on-equals message="Response message is not valid as expected." expectedValue="#['{&quot;Api_key&quot;:&quot;dGVzdF9heGljb3JwdGVzdDpCLXFhMi0wLTViMDRhZDM2LTAtMzAyYzAyMTQxMDQyMmJkZjAwOWE5NWI3MWU1MzMzOTIzMWU2MjBkYTdmNDgyN2M0MDIxNDIwNmZlNWI4NTgyZDQ2ZGUxOTE3YmZjMzZmYzRmZDUyYWQ4M2ZlZTU=&quot;,&quot;MerchantID&quot;:&quot;1001219270&quot;}']" actualValue="#[payload]" doc:name="Check Response Payload"/>
+    </munit:test>
+    <munit:test name="ClientTokenFlow-TestCase2(SuccessScenarioForCurrencyGBP)" description="Verifying GetClientToken flow with test request for success scenario.">
+        <munit:set payload="#[]" doc:name="Set Request Payload">
+            <munit:inbound-properties>
+                <munit:inbound-property key="http.query.params" value="#[{&quot;Currency&quot;:&quot;GBP&quot;,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;}]"/>
+            </munit:inbound-properties>
+        </munit:set>
+        <logger message="#[' Request Payload \n '+message.inboundProperties.'http.query.params'+'\n']" level="INFO" category="MUnit Test || ClientTokenFlow-TestCase2(SuccessScenarioForCurrencyGBP)" doc:name="Request Payload"/>
+        <flow-ref name="client-tokenFlow" doc:name="Flow-ref to client-tokenFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#['Response Payload \n Api_key : '+payload.Api_key+'\n MerchantID : '+payload.MerchantID+'\n']" level="INFO" category="MUnit Test || ClientTokenFlow-TestCase2(SuccessScenarioForCurrencyGBP)" doc:name="Response Payload"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <munit:assert-on-equals message="Response message is not valid as expected." expectedValue="#['{&quot;Api_key&quot;:&quot;dGVzdF9heGljb3JwdGVzdDpCLXFhMi0wLTViMDRhZDM2LTAtMzAyYzAyMTQxMDQyMmJkZjAwOWE5NWI3MWU1MzMzOTIzMWU2MjBkYTdmNDgyN2M0MDIxNDIwNmZlNWI4NTgyZDQ2ZGUxOTE3YmZjMzZmYzRmZDUyYWQ4M2ZlZTU=&quot;,&quot;MerchantID&quot;:&quot;1001218660&quot;}']" actualValue="#[payload]" doc:name="Check Response Payload"/>
+    </munit:test>
+    <munit:test name="ClientTokenFlow-TestCase3(SuccessScenarioForCurrencyCAD)" description="Verifying GetClientToken flow with test request for success scenario.">
+        <munit:set payload="#[]" doc:name="Set Request Payload">
+            <munit:inbound-properties>
+                <munit:inbound-property key="http.query.params" value="#[{&quot;Currency&quot;:&quot;CAD&quot;,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;}]"/>
+            </munit:inbound-properties>
+        </munit:set>
+        <logger message="#[' Request Payload \n '+message.inboundProperties.'http.query.params'+'\n']" level="INFO" category="MUnit Test || ClientTokenFlow-TestCase3(SuccessScenarioForCurrencyCAD)" doc:name="Request Payload"/>
+        <flow-ref name="client-tokenFlow" doc:name="Flow-ref to client-tokenFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#['Response Payload \n Api_key : '+payload.Api_key+'\n MerchantID : '+payload.MerchantID+'\n']" level="INFO" category="MUnit Test || ClientTokenFlow-TestCase3(SuccessScenarioForCurrencyCAD)" doc:name="Response Payload"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <munit:assert-on-equals message="Response message is not valid as expected." expectedValue="#['{&quot;Api_key&quot;:&quot;dGVzdF9heGljb3JwdGVzdDpCLXFhMi0wLTViMDRhZDM2LTAtMzAyYzAyMTQxMDQyMmJkZjAwOWE5NWI3MWU1MzMzOTIzMWU2MjBkYTdmNDgyN2M0MDIxNDIwNmZlNWI4NTgyZDQ2ZGUxOTE3YmZjMzZmYzRmZDUyYWQ4M2ZlZTU=&quot;,&quot;MerchantID&quot;:&quot;1001220020&quot;}']" actualValue="#[payload]" doc:name="Check Response Payload"/>
+    </munit:test>
+    <munit:test name="ClientTokenFlow-TestCase4(SuccessScenarioForCurrencyUSD)" description="Verifying GetClientToken flow with test request for success scenario.">
+        <munit:set payload="#[]" doc:name="Set Request Payload">
+            <munit:inbound-properties>
+                <munit:inbound-property key="http.query.params" value="#[{&quot;Currency&quot;:&quot;USD&quot;,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;}]"/>
+            </munit:inbound-properties>
+        </munit:set>
+        <logger message="#[' Request Payload \n '+message.inboundProperties.'http.query.params'+'\n']" level="INFO" category="MUnit Test || ClientTokenFlow-TestCase4(SuccessScenarioForCurrencyUSD)" doc:name="Request Payload"/>
+        <flow-ref name="client-tokenFlow" doc:name="Flow-ref to client-tokenFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#['Response Payload \n Api_key : '+payload.Api_key+'\n MerchantID : '+payload.MerchantID+'\n']" level="INFO" category="MUnit Test || ClientTokenFlow-TestCase4(SuccessScenarioForCurrencyUSD)" doc:name="Response Payload"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <munit:assert-on-equals message="Response message is not valid as expected." expectedValue="#['{&quot;Api_key&quot;:&quot;dGVzdF9heGljb3JwdGVzdDpCLXFhMi0wLTViMDRhZDM2LTAtMzAyYzAyMTQxMDQyMmJkZjAwOWE5NWI3MWU1MzMzOTIzMWU2MjBkYTdmNDgyN2M0MDIxNDIwNmZlNWI4NTgyZDQ2ZGUxOTE3YmZjMzZmYzRmZDUyYWQ4M2ZlZTU=&quot;,&quot;MerchantID&quot;:&quot;1001220030&quot;}']" actualValue="#[payload]" doc:name="Check Response Payload"/>
+    </munit:test>
+  
+    <munit:test name="ClientTokenFlow-TestCase5(FailureScenariowithCurrencyValueAsNull)" description="This test case is used to validate &quot;Currency&quot; field coming from request payload , remaining fields are valid   " >
+        <munit:set payload="#[]" doc:name="Set Request payload">
+            <munit:inbound-properties>
+                <munit:inbound-property key="http.query.params" value="#[{&quot;Currency&quot;:&quot;&quot;,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;}]"/>
+            </munit:inbound-properties>
+        </munit:set>
+        <logger level="INFO" doc:name="Request Payload" category="MUnit Test || ClientTokenFlow-TestCase5(FailureScenariowithCurrencyValueAsNull)" message="#[' Request Payload \n '+message.inboundProperties.'http.query.params'+'\n']"/>
+        <flow-ref name="client-tokenFlow" doc:name="Flow-ref to client-tokenFlow"/>
+        <logger message="#['Error Response Payload \n '+payload+'\n']" level="INFO" doc:name="Error Response Payload" category="MUnit Test || ClientTokenFlow-TestCase5(FailureScenariowithCurrencyValueAsNull)"/>
+        <munit:assert-on-equals message="Response message is not valid as expected." expectedValue="#['{ &quot;message&quot; : &quot;Legal Entity and Currency Mismatch&quot; }']" actualValue="#[payload]" doc:name="Assert Error Response"/>
+    </munit:test>
+    <munit:test name="ClientTokenFlow-TestCase6(FailureScenariowithNewCurrencyValueNotConfigured)" description="This test case is used to validate &quot;Currency&quot; field coming from request payload , remaining fields are valid   " >
+        <munit:set payload="#[]" doc:name="Set Request payload">
+            <munit:inbound-properties>
+                <munit:inbound-property key="http.query.params" value="#[{&quot;Currency&quot;:&quot;INR&quot;,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;}]"/>
+            </munit:inbound-properties>
+        </munit:set>
+        <logger level="INFO" doc:name="Request Payload" category="MUnit Test || ClientTokenFlow-TestCase6(FailureScenariowithNewCurrencyValueNotConfigured)" message="#[' Request Payload \n '+message.inboundProperties.'http.query.params'+'\n']"/>
+        <flow-ref name="client-tokenFlow" doc:name="Flow-ref to client-tokenFlow"/>
+        <logger message="#['Error Response Payload \n '+payload+'\n']" level="INFO" doc:name="Error Response Payload" category="MUnit || ClientTokenFlow-TestCase6(FailureScenariowithNewCurrencyValueNotConfigured)"/>
+        <munit:assert-on-equals message="Response message is not valid as expected." expectedValue="#['{ &quot;message&quot; : &quot;Legal Entity and Currency Mismatch&quot; }']" actualValue="#[payload]" doc:name="Assert Error Response"/>
+    </munit:test>
+    <munit:test name="ClientTokenFlow-TestCase7(FailureScenariowithNewLegalEntityValueNotConfigured)" description="This test case is used to validate &quot;LegalEntity&quot; field coming from request payload , remaining fields are valid   " >
+        <munit:set payload="#[]" doc:name="Set Request payload">
+            <munit:inbound-properties>
+                <munit:inbound-property key="http.query.params" value="#[{&quot;Currency&quot;:&quot;EUR&quot;,&quot;LegalEntity&quot;:&quot;Axi Limited&quot;}]"/>
+            </munit:inbound-properties>
+        </munit:set>
+        <logger level="INFO" doc:name="Request Payload" category="MUnit Test || ClientTokenFlow-TestCase7(FailureScenariowithNewLegalEntityValueNotConfigured)" message="#[' Request Payload \n '+message.inboundProperties.'http.query.params'+'\n']"/>
+        <flow-ref name="client-tokenFlow" doc:name="Flow-ref to client-tokenFlow"/>
+        <logger message="#['Error Response Payload \n '+payload+'\n']" level="INFO" doc:name="Error Response Payload" category="MUnit Test || ClientTokenFlow-TestCase7(FailureScenariowithNewLegalEntityValueNotConfigured)"/>
+        <munit:assert-on-equals message="Response message is not valid as expected." expectedValue="#['{ &quot;message&quot; : &quot;Legal Entity and Currency Mismatch&quot; }']" actualValue="#[payload]" doc:name="Assert Error Response"/>
+    </munit:test>
+    <munit:test name="ClientTokenFlow-TestCase8(FailureScenariowithLegalEntityValueAsNull)" description="This test case is used to validate &quot;LegalEntity&quot; field coming from request payload , remaining fields are valid   " >
+        <munit:set payload="#[]" doc:name="Set Request payload">
+            <munit:inbound-properties>
+                <munit:inbound-property key="http.query.params" value="#[{&quot;Currency&quot;:&quot;EUR&quot;,&quot;LegalEntity&quot;:&quot;&quot;}]"/>
+            </munit:inbound-properties>
+        </munit:set>
+        <logger level="INFO" doc:name="Request Payload" category="MUnit Test || ClientTokenFlow-TestCase8(FailureScenariowithLegalEntityValueAsNull)" message="#[' Request Payload \n '+message.inboundProperties.'http.query.params'+'\n']"/>
+        <flow-ref name="client-tokenFlow" doc:name="Flow-ref to client-tokenFlow"/>
+        <logger level="INFO" doc:name="Error Response Payload" category="MUnit Test || ClientTokenFlow-TestCase8(FailureScenariowithLegalEntityValueAsNull)" message="#['Error Response Payload \n '+payload+'\n']"/>
+        <munit:assert-on-equals expectedValue="#['{ &quot;message&quot; : &quot;Legal Entity and Currency Mismatch&quot; }']" actualValue="#[payload]" doc:name="Assert Error Response" message="Response message is not valid as expected."/>
+    </munit:test>
+    
+</mule>

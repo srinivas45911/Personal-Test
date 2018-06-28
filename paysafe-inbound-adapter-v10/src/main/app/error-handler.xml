@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:json="http://www.mulesoft.org/schema/mule/json"
+	xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+	xmlns:cluster="http://www.mulesoft.org/schema/mule/ee/cluster" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+    <configuration defaultExceptionStrategy-ref="GlobalExceptionStrategy" doc:name="Configuration">
+        <http:config useTransportForUris="false"/>
+    </configuration>
+
+<choice-exception-strategy name="GlobalExceptionStrategy">
+        <catch-exception-strategy when="#[exception.causedBy(org.mule.module.http.internal.request.ResponseValidatorException)]" doc:name="Catch API Exception Strategy">
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+            <logger message="#[payload]" level="INFO" category="Exceptions || Exception Payload" doc:name="Exception Payload" doc:description="Exception Payload Logger"/>
+                <set-variable variableName="ExceptonMsgVar" value="#[payload]" doc:name="Exception Payload" doc:description="Storing the Exception Payload in the variable"/>
+                <scripting:transformer doc:name="Transform to Exception Trace Message" doc:description="preparing the Expection payload Mapping">
+                    <scripting:script engine="Groovy"><![CDATA[import groovy.util.*
+import groovy.json.*
+
+def exceptionPayload = payload
+def errorInfo = exception.info.'Element XML'
+def processorNameVar = exception.info.Element
+def rootNode = new XmlParser(false, false).parseText(errorInfo)
+def getApiNameVar = rootNode.@'doc:name'
+def common_error_message=new JsonBuilder()
+
+common_error_message  Error : [
+							    Category: "Error sending HTTP request.",
+								 APIName: getApiNameVar,
+					   PaysafeErrorCode : exceptionPayload.error.code,
+				    PaysafeErrorMessage : exceptionPayload.error.message,
+			     PaysafeExceptionPayload: exceptionPayload.toString(),
+                          ProcessorName : processorNameVar
+                              ]          
+        
+return common_error_message.toString()
+
+
+]]></scripting:script>
+                </scripting:transformer>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <logger message="#['Common Error Handler Message : ' +'\n ErrorCategory : '+payload.Error.Category +'\n APIName : '+payload.Error.APIName+'\n Paysafe Error Code: '+payload.Error.PaysafeErrorCode+'\n Paysafe Error Message: '+payload.Error.PaysafeErrorMessage+'\n ExceptionPayload: '+payload.Error.PaysafeExceptionPayload+'\n Failing Message Processor Name : '+payload.Error.ProcessorName]" level="INFO" category="Common Error Handler || HTTP Requester" doc:name="Exception Trace Message" doc:description="Exception Trace Message Logger"/>
+            <choice doc:name="Route to Axicorp Response" doc:description="Checking the Condition for Failure  Route to Axicorp Response">
+                <when expression="#[(payload.Error.APIName == 'Get Profile API') || (payload.Error.APIName == 'Create Card API') || (payload.Error.APIName == 'Update Card API') || (payload.Error.APIName == 'Update Address API') || (payload.Error.APIName == 'Update Profile API') || (payload.Error.APIName == 'Pre Authorization API') || (payload.Error.APIName == 'Create Address API') || (payload.Error.APIName == 'Create Profile API')]">
+                    <scripting:transformer doc:name="Transform To Instrument Failure Response" doc:description="Preparing the Transformation(Mapping) To Instrument Failure Response ">
+                        <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+
+def target_payload = new JsonBuilder()
+def exception_payload = flowVars['ExceptonMsgVar']
+def request_payload = flowVars['requestPayloadVar']
+
+target_payload Instrument: [
+                InstrumentId: "",
+                ProfileId: "",
+                GatewayToken: "",
+				GatewayResponseCode : exception_payload.error.code,
+				GatewayResponseMessage : exception_payload.error.message,
+				GatewayStatus : "FAILED",				
+                type: "",
+                SubType: "",
+                IsDebit: "",
+                HolderName: "",
+                Identifier: "",
+                ExpiryDate: "",
+                IssuedCountry: "",
+                AdditionalInfo: [
+				    AVS : "",
+					CVV : ""
+					
+				]
+              ],
+              Client: [
+                ClientId: request_payload.Client.ClientId,
+                AdditionalInfo: {}
+              ]
+return target_payload.toString()]]></scripting:script>
+                    </scripting:transformer>
+                </when>
+                <when expression="#[payload.Error.APIName == 'Authorization API']">
+                    <scripting:transformer doc:name="Transform to Payment CMF Failure Response" doc:description="Preparing theTransformation(mapping) to Payment CMF Failure Response">
+                        <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def result=""
+def exception_payload = flowVars['ExceptonMsgVar']
+def PaymentCMF_payload =  flowVars['despositsRequest']
+result=[
+		OrderId:PaymentCMF_payload.OrderId, \
+		ClientIp:"", \
+		ProviderReference:"", \
+		ProviderCode: exception_payload.error.code, \
+		ProviderMessage: exception_payload.error.message, \
+		ProviderApproved: false,\
+		CurrencyReceived:"", \
+		AmountReceived:"", \
+		ClientAccNo:"", \
+		ClientAccName:"",\
+		AVSres:"", \
+		Country:"", \
+		InstrumentType:"" \
+		]
+return result			       ]]></scripting:script>
+                    </scripting:transformer>
+                    <json:object-to-json-transformer doc:name="Object to JSON"/>
+                    <jms:outbound-endpoint queue="${platform.inbound.queue}" connector-ref="Active_MQ" doc:name="paymentCmf Queue" doc:description="Storing Response payload to paymentCMF Queue"/>
+                    <scripting:transformer doc:name="Transform to Deposits Failure Response" doc:description="Preparing theTransformation(mapping) to Deposits Failure Response">
+                        <scripting:script engine="Groovy"><![CDATA[import groovy.json.*        
+def result=""
+def exception_payload = flowVars['ExceptonMsgVar']
+def deposits_payload =  flowVars['despositsRequest']
+result =[
+	    OrderId:deposits_payload.OrderId, \
+	    ProviderReference:"", \
+		ClientRedirectURL:"", \
+		ClientRedirectType:"NA", \
+		PostParameters:"", \
+		PostPayload:"", \
+		RecommendedDisplayType:"None", \
+		RecommendedDisplayWidth:0, \
+		RecommendedDisplayHeight:0, \
+		PaymentStatus: "REJECTED", \
+		PaymentCode: exception_payload.error.code, \
+		PaymentMessage: exception_payload.error.message, \
+		AdditionalInfo:[ \
+			CardType:"", \
+			IsDebit:"",
+			CardIssuedCountry:"", \
+			AuthCode:"" \
+					   ] \
+        ]		
+return result]]></scripting:script>
+                    </scripting:transformer>
+                    <json:object-to-json-transformer doc:name="Object to JSON"/>
+                    <logger message="#[payload]" level="INFO" category="Deposits || Deposits Failure Response" doc:name="Deposits Failure Response" doc:description="Deposits Failure Response Logger"/>
+                </when>
+                <when expression="#[payload.Error.APIName == 'Standalone Credit API']">
+                    <scripting:transformer doc:name="Transform to Withdrawals Failure Response" doc:description="Preparing theTransformation(mapping) to Withdrawals Failure Response">
+                        <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def exception_payload = flowVars['ExceptonMsgVar']
+def withdrawalRequest=flowVars['withdrawalRequestMap']
+
+			     result=[ \
+				        WithdrawalId:withdrawalRequest.WithdrawalId, \
+				        ProviderReference:"", \
+				        ProviderDepositReference:"", \
+						Status:"FAILED", \
+						GatewayResponseCode:exception_payload.error.code, \
+						GatewayResponseMessage:exception_payload.error.message, \
+						Message:"", \
+						AdditionalInfo:[] \
+						] 
+					
+				
+					   return result]]></scripting:script>
+                    </scripting:transformer>
+                    <json:object-to-json-transformer doc:name="Object to JSON"/>
+                    <logger message="#[payload]" level="INFO" category="withdrawls || Withdrawls Failure Response" doc:name="Withdrawls Failure Response" doc:description="Withdrawls Failure Response Logger"/>
+                    <jms:outbound-endpoint queue="${gateway.withdrawal.outbound.queue}" connector-ref="Active_MQ" doc:name="Withdrawal Approved Queue" doc:description="Storing response payload to Withdrawal Approved Queue"/>
+                </when>
+                <when expression="#[payload.Error.APIName == 'Authentications API']">
+                    <scripting:transformer doc:name="Transform to Authentication Failure Response" doc:description="Preparing theTransformation(mapping) to Authentication Failure Response">
+                        <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def result=""
+def exception_payload = flowVars['ExceptonMsgVar']		
+def requestMapVar = flowVars['requestMap']  
+					   
+result =[ \
+                        AuthenticationId: "" , \
+                        MerchantReference: requestMapVar.MerchantReference , \
+                        GatewayResponseCode: exception_payload.error.code, \
+                        GatewayResponseMessage: exception_payload.error.message, \
+                        Result: "", \
+                        ECI: "", \
+                        CAVV: "", \
+                        AdditionalInfo:      [ \
+                              Status: "", \
+                              SignatureStatus: "" , \
+                              XID: "" \
+                        ] \
+                  ]
+return result
+]]></scripting:script>
+                    </scripting:transformer>
+                    <json:object-to-json-transformer doc:name="Object to JSON"/>
+                </when>
+                <when expression="#[payload.Error.APIName == 'Enrollment Lookup API']">
+                    <scripting:transformer doc:name="Transform to Enrollment Failure Response" doc:description="Preparing theTransformation(mapping) to Enrollment Failure Response">
+                        <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def result=""
+def exception_payload = flowVars['ExceptonMsgVar']	
+def merchantReferenceVar = flowVars['merchantNumber']		   
+					   
+result =[ \
+                        GatewayId: "", \
+                        MerchantReference:merchantReferenceVar, \
+                        GatewayResponseCode: exception_payload.error.code, \
+                        GatewayResponseMessage: exception_payload.error.message, \
+                        AcsUrl: "" , \
+                        PayAuthReq: "", \
+                        ThreeDEnrolled: "", \
+                        AdditionalInfo:      [] \
+
+                  ]
+return result
+]]></scripting:script>
+                    </scripting:transformer>
+                    <json:object-to-json-transformer doc:name="Object to JSON"/>
+                </when>
+                <otherwise>
+                    <logger message="#[payload]" level="INFO" category="Exceptions || Other Exception Message" doc:name="Other Exception Message" doc:description="Other Exception Message Logger"/>
+                </otherwise>
+            </choice>
+            <set-property doc:name="Set HTTP Status" propertyName="http.status" value="200"/>
+            </catch-exception-strategy>
+        <catch-exception-strategy when="#[exception.causedBy(java.lang.IllegalArgumentException: LegalEntityAndCurrencyMismatch)]" doc:name="Legal Entity and Currency Mismatch Exception Strategy">
+            <set-payload value="{ &quot;message&quot; : &quot;Legal Entity and Currency Mismatch&quot; }" doc:name="Set Payload"/>
+            <logger message="#[payload]" level="INFO" category="Exceptions || Legal Entity and Currency Mismatch Exception" doc:name="Legal Entity and Currency Mismatch Exception Logger"/>
+        </catch-exception-strategy>
+        <catch-exception-strategy doc:name="Catch AllOther Exception Strategy">
+            <set-payload value="#[exception.message]" doc:name="Set Payload"/>
+            <logger message="#[payload]" level="INFO" category="Exceptions || All Other" doc:name="All Other Exceptions Logger"/>
+        </catch-exception-strategy>
+    </choice-exception-strategy>
+</mule>

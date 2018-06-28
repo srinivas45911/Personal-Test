@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	<flow name="client-tokenFlow">
+		<logger message="#['Request Header \n http.request.uri = ' +message.inboundProperties.'http.request.uri'+  '\n content-length = '+message.inboundProperties.'content-length' +  '\n http.query.string = '+message.inboundProperties.'http.query.string'+  '\n accept-language = '+message.inboundProperties.'accept-language'+  '\n postman-token = '+message.inboundProperties.'postman-token'+  '\n http.query.params = '+message.inboundProperties.'http.query.params'+  '\n http.listener.path = '+message.inboundProperties.'http.listener.path'+  '\n http.uri.params = '+message.inboundProperties.'http.uri.params'+  '\n host = '+message.inboundProperties.'host'+  '\n content-type = '+message.inboundProperties.'content-type'+  '\n http.method = '+message.inboundProperties.'http.method'+  '\n caccept-encoding = '+message.inboundProperties.'accept-encoding'+  '\n http.relative.path = '+message.inboundProperties.'http.relative.path'+  '\n http.request.path = '+message.inboundProperties.'http.request.path']  #['\n \n Request HTTP Query Params are :  \n' +message.inboundProperties.'http.query.params']"
+			level="INFO" category="Client Token || Request Payload" doc:name="Client Token Request Payload" doc:description="Client-Token Request payload Logger"/>
+		<set-payload value="#[message.inboundProperties.'http.query.params']"
+			doc:name="Request Payload" doc:description="Client-Token http.query.params Request"/>
+		<scripting:transformer doc:name="Transformation To ApiKey" doc:description="Groovy logic for Apikey and Account_Id based on Currency and LegalEntity">
+			<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def result = new JsonBuilder()
+def apiMessage=""
+def merchant_ID=""
+def request_Payload = payload
+String legalEntity =request_Payload.LegalEntity
+String currency=request_Payload.Currency
+new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+      apiMessage=message.getInvocationProperty('Apikey')
+      apiMessage=apiMessage.substring(apiMessage.indexOf(' ')+1)
+	  merchant_ID=message.getInvocationProperty('Account_Id')
+result Api_key:apiMessage,
+       MerchantID:merchant_ID
+
+return result.toString()
+]]></scripting:script>
+		</scripting:transformer>
+		<logger message="#[payload]" level="INFO"
+			category="Client Token || Response Payload" doc:name="Client Token Response Payload" doc:description="Client-Token Response paylaod Logger"/>
+	</flow>
+</mule>

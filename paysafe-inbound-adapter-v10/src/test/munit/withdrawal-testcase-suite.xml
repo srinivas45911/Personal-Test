@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  	xmlns:mock="http://www.mulesoft.org/schema/mule/mock" 
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd">
+    <munit:config name="munit" mock-connectors="false" mock-inbounds="false" doc:name="MUnit configuration"/>
+    <spring:beans>
+        <spring:import resource="classpath:api.xml"/>
+        <spring:import resource="classpath:clienttoken.xml"/>
+        <spring:import resource="classpath:config.xml"/>
+        <spring:import resource="classpath:deposits.xml"/>
+        <spring:import resource="classpath:threedsecure.xml"/>
+        <spring:import resource="classpath:instrument.xml"/>
+        <spring:import resource="classpath:checkstatus.xml"/>
+        <spring:import resource="classpath:error-handler.xml"/>
+        <spring:import resource="classpath:withdrawals.xml"/>
+
+    </spring:beans>
+    <munit:test name="WithdrawalRequestFlow-TestCase1(SuccessScenario)" description="MUnit Test" >
+        <munit:set payload="#['{&quot;WithdrawalRequests&quot;:[{&quot;WithdrawalId&quot;:1575845,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,&quot;Currency&quot;:&quot;GBP&quot;,&quot;Amount&quot;:1000.12,&quot;AdditionalInfo&quot;:{&quot;ClientName&quot;:&quot;Stephen test&quot;,&quot;ClientIp&quot;:&quot;204.91.0.12&quot;,&quot;BankName&quot;:&quot;Hong Leong&quot;,&quot;CardToken&quot;:&quot;C58vIo0FlWWydf4&quot;,&quot;ClientAccountNumber&quot;:&quot;1241414141&quot;}}]}']" doc:name="Set Request payload"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger level="INFO" doc:name="Request Payload" message="#['Request Payload \n WithdrawalId : '+payload.WithdrawalRequests[0].WithdrawalId+'\n ProviderDepositReference : '+payload.WithdrawalRequests[0].ProviderDepositReference+'\n LegalEntity : '+payload.WithdrawalRequests[0].LegalEntity+'\n Currency : '+payload.WithdrawalRequests[0].Currency+'\n Amount : '+payload.WithdrawalRequests[0].Amount+'\n ClientName :'+payload.WithdrawalRequests[0].AdditionalInfo.ClientName+'\n BankName:'+payload.WithdrawalRequests[0].AdditionalInfo.BankName+'\n CardToken:'+payload.WithdrawalRequests[0].AdditionalInfo.CardToken +'\n ClientAccountNumber:'+payload.WithdrawalRequests[0].AdditionalInfo.ClientAccountNumber +'\n']" category="MUnit Test || WithdrawalRequestFlow-TestCase1(SuccessScenario)"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <flow-ref name="withdrawalsRequestFlow" doc:name="Flow-ref to withdrawalsRequestFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger level="INFO" doc:name="Response Payload" category="MUnit Test || WithdrawalRequestFlow-TestCase1(SuccessScenario)" message="#[' Response Payload \n ReturnValue : '+payload.ReturnValue+'\n Message : '+payload.Message+'\n']"/>
+        <munit:assert-on-equals message="Response message is not valid as expected" expectedValue="#['Queued']" actualValue="#[payload.ReturnValue]" doc:name="Check Response Payload"/>
+    </munit:test>
+    <munit:test name="WithdrawalResponseFlow-TestCase2(SuccessScenarioforPendingStatus)" description="MUnit Test">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Standalone Credit API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Standalone Credit API']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['{&quot;links&quot;:[{&quot;rel&quot;:&quot;self&quot;,&quot;href&quot;:&quot;https://api.test.paysafe.com/cardpayments/v1/accounts/1001218660/standalonecredits/36426262-471c-4455-9ea8-0e3f3b274659&quot;}],&quot;id&quot;:&quot;36426262-471c-4455-9ea8-0e3f3b274659&quot;,&quot;merchantRefNum&quot;:&quot;15758489&quot;,&quot;txnTime&quot;:&quot;2018-06-19T05:36:28Z&quot;,&quot;status&quot;:&quot;PENDING&quot;,&quot;amount&quot;:100012,&quot;card&quot;:{&quot;type&quot;:&quot;VI&quot;,&quot;lastDigits&quot;:&quot;2345&quot;,&quot;cardExpiry&quot;:{&quot;month&quot;:12,&quot;year&quot;:2020}},&quot;profile&quot;:{&quot;firstName&quot;:&quot;Surabhi&quot;,&quot;lastName&quot;:&quot;Juneja&quot;,&quot;email&quot;:&quot;surabhijuneja.smith@email.com&quot;},&quot;billingDetails&quot;:{&quot;street&quot;:&quot;100 kings&quot;,&quot;street2&quot;:&quot;cooks town&quot;,&quot;city&quot;:&quot;Toronto&quot;,&quot;state&quot;:&quot;ON&quot;,&quot;country&quot;:&quot;CA&quot;,&quot;zip&quot;:&quot;M5H2N2&quot;,&quot;phone&quot;:&quot;777-444-8888&quot;},&quot;customerIp&quot;:&quot;204.91.0.12&quot;,&quot;description&quot;:&quot;Account Withdrawals&quot;,&quot;currencyCode&quot;:&quot;GBP&quot;}']"/>
+        </mock:when>
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on pre publish to queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Object to JSON']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <munit:assert-on-equals message="Response message is not valid as expected" expectedValue="#['PENDING']" actualValue="#[payload.Status]" doc:name="Assert Status"/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <munit:set payload="#['{&quot;WithdrawalId&quot;:15758489,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,&quot;Currency&quot;:&quot;GBP&quot;,&quot;Amount&quot;:1000.12,&quot;AdditionalInfo&quot;:{&quot;ClientName&quot;:&quot;Stephen test&quot;,&quot;ClientIp&quot;:&quot;204.91.0.12&quot;,&quot;BankName&quot;:&quot;Hong Leong&quot;,&quot;CardToken&quot;:&quot;C58vIo0FlWWydf4&quot;,&quot;ClientAccountNumber&quot;:&quot;1241414141&quot;}}']" doc:name="Set Request payload"/>
+        <logger level="INFO" doc:name="Request Payload" category="MUnit Test || WithdrawalResponseFlow-TestCase2(SuccessScenarioforPendingStatus)" message="#['Request Payload \n'+payload+'\n']"/>
+        <flow-ref name="withdrawalsResponseFlow" doc:name="Flow-ref to withdrawalsResponseFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger level="INFO" doc:name="Response Payload" category="MUnit Test || WithdrawalResponseFlow-TestCase2(SuccessScenarioforPendingStatus)" message="#[' Response Payload \n WithdrawalId : '+payload.WithdrawalId+' \n ProviderReference : '+payload.ProviderReference+' \n Status : '+payload.Status+' \n Gateway Response Message : '+payload.GatewayResponseMessage+' \n Gateway Response Code : '+payload.GatewayResponseCode+ '\n']"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <munit:assert-on-equals message="Response message is not valid as expected" expectedValue="#['{&quot;Status&quot;:&quot;PENDING&quot;,&quot;AdditionalInfo&quot;:[],&quot;Message&quot;:&quot;&quot;,&quot;ProviderDepositReference&quot;:&quot;&quot;,&quot;GatewayResponseMessage&quot;:&quot;PENDING&quot;,&quot;ProviderReference&quot;:&quot;36426262-471c-4455-9ea8-0e3f3b274659&quot;,&quot;WithdrawalId&quot;:15758489,&quot;GatewayResponseCode&quot;:&quot;&quot;}']" actualValue="#[payload]" doc:name="Check Response Payload"/>
+    </munit:test>
+    <munit:test name="WithdrawalResponseFlow-TestCase3(SuccessScenarioforCompletedStatus)" description="MUnit Test">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Standalone Credit API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Standalone Credit API']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['{&quot;links&quot;:[{&quot;rel&quot;:&quot;self&quot;,&quot;href&quot;:&quot;https://api.test.paysafe.com/cardpayments/v1/accounts/1001218660/standalonecredits/36426262-471c-4455-9ea8-0e3f3b274659&quot;}],&quot;id&quot;:&quot;36426262-471c-4455-9ea8-0e3f3b274659&quot;,&quot;merchantRefNum&quot;:&quot;15758489&quot;,&quot;txnTime&quot;:&quot;2018-06-19T05:36:28Z&quot;,&quot;status&quot;:&quot;COMPLETED&quot;,&quot;amount&quot;:100012,&quot;card&quot;:{&quot;type&quot;:&quot;VI&quot;,&quot;lastDigits&quot;:&quot;2345&quot;,&quot;cardExpiry&quot;:{&quot;month&quot;:12,&quot;year&quot;:2020}},&quot;profile&quot;:{&quot;firstName&quot;:&quot;Surabhi&quot;,&quot;lastName&quot;:&quot;Juneja&quot;,&quot;email&quot;:&quot;surabhijuneja.smith@email.com&quot;},&quot;billingDetails&quot;:{&quot;street&quot;:&quot;100 kings&quot;,&quot;street2&quot;:&quot;cooks town&quot;,&quot;city&quot;:&quot;Toronto&quot;,&quot;state&quot;:&quot;ON&quot;,&quot;country&quot;:&quot;CA&quot;,&quot;zip&quot;:&quot;M5H2N2&quot;,&quot;phone&quot;:&quot;777-444-8888&quot;},&quot;customerIp&quot;:&quot;204.91.0.12&quot;,&quot;description&quot;:&quot;Account Withdrawals&quot;,&quot;currencyCode&quot;:&quot;GBP&quot;}']"/>
+        </mock:when>
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on pre publish to queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Object to JSON']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <munit:assert-on-equals message="Response message is not valid as expected" expectedValue="#['SENT']" actualValue="#[payload.Status]" doc:name="Assert Status"/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <munit:set payload="#['{&quot;WithdrawalId&quot;:15758489,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,&quot;Currency&quot;:&quot;GBP&quot;,&quot;Amount&quot;:1000.12,&quot;AdditionalInfo&quot;:{&quot;ClientName&quot;:&quot;Stephen test&quot;,&quot;ClientIp&quot;:&quot;204.91.0.12&quot;,&quot;BankName&quot;:&quot;Hong Leong&quot;,&quot;CardToken&quot;:&quot;C58vIo0FlWWydf4&quot;,&quot;ClientAccountNumber&quot;:&quot;1241414141&quot;}}']" doc:name="Set Request payload"/>
+        <logger message="#['Request Payload \n'+payload+'\n']" level="INFO" category="MUnit Test || WithdrawalResponseFlow-TestCase3(SuccessScenarioforCompletedStatus)" doc:name="Request Payload"/>
+        <flow-ref name="withdrawalsResponseFlow" doc:name="Flow-ref to withdrawalsResponseFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#[' Response Payload \n WithdrawalId : '+payload.WithdrawalId+' \n ProviderReference : '+payload.ProviderReference+' \n Status : '+payload.Status+' \n Gateway Response Message : '+payload.GatewayResponseMessage+' \n Gateway Response Code : '+payload.GatewayResponseCode+ '\n']" level="INFO" category="MUnit Test || WithdrawalResponseFlow-TestCase3(SuccessScenarioforCompletedStatus)" doc:name="Response Payload"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <munit:assert-on-equals message="Response message is not valid as expected" expectedValue="#['{&quot;Status&quot;:&quot;SENT&quot;,&quot;AdditionalInfo&quot;:[],&quot;Message&quot;:&quot;&quot;,&quot;ProviderDepositReference&quot;:&quot;&quot;,&quot;GatewayResponseMessage&quot;:&quot;COMPLETED&quot;,&quot;ProviderReference&quot;:&quot;36426262-471c-4455-9ea8-0e3f3b274659&quot;,&quot;WithdrawalId&quot;:15758489,&quot;GatewayResponseCode&quot;:&quot;&quot;}']" actualValue="#[payload]" doc:name="Check Response Payload"/>
+    </munit:test>
+    
+    <munit:test name="WithdrawalResponseFlow-TestCase4(FailureScenarioForWithdrwalId)" description="MUnit Test">
+        <munit:set payload="#['{&quot;WithdrawalId&quot;:15758489,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,&quot;Currency&quot;:&quot;GBP&quot;,&quot;Amount&quot;:1000.12,&quot;AdditionalInfo&quot;:{&quot;ClientName&quot;:&quot;Stephen test&quot;,&quot;ClientIp&quot;:&quot;204.91.0.12&quot;,&quot;BankName&quot;:&quot;Hong Leong&quot;,&quot;CardToken&quot;:&quot;C58vIo0FlWWydf4&quot;,&quot;ClientAccountNumber&quot;:&quot;1241414141&quot;}}']" doc:name="Set Request payload"/>
+        <logger message="#['Request Payload \n'+payload+'\n']" level="INFO" category="MUnit Test || WithdrawalResponseFlow-TestCase4(FailureScenarioForWithdrwalId)" doc:name="Request Payload"/>
+        <flow-ref name="withdrawalsResponseFlow" doc:name="Flow-ref to withdrawalsResponseFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <logger message="#[' Response Payload \n WithdrawalId : '+payload.WithdrawalId+' \n ProviderReference : '+payload.ProviderReference+' \n Status : '+payload.Status+' \n Gateway Response Message : '+payload.GatewayResponseMessage+' \n Gateway Response Code : '+payload.GatewayResponseCode+ '\n']" level="INFO" category="MUnit Test || WithdrawalResponseFlow-TestCase4(FailureScenarioForWithdrwalId)" doc:name="Response Payload"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <munit:assert-on-equals message="Response message is not valid as expected" expectedValue="#['{&quot;Status&quot;:&quot;FAILED&quot;,&quot;AdditionalInfo&quot;:[],&quot;Message&quot;:&quot;&quot;,&quot;ProviderDepositReference&quot;:&quot;&quot;,&quot;GatewayResponseMessage&quot;:&quot;The transaction you have submitted has already been processed.&quot;,&quot;ProviderReference&quot;:&quot;&quot;,&quot;WithdrawalId&quot;:15758489,&quot;GatewayResponseCode&quot;:&quot;5031&quot;}']" actualValue="#[payload]" doc:name="Check Response Payload"/>
+    </munit:test>
+    
+    
+</mule>

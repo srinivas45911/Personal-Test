@@ -1,0 +1,1093 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<flow name="instrumentFlow">
+		<logger
+			message="#['Request Header \n http.request.uri = ' +message.inboundProperties.'http.request.uri'+  '\n content-length = '+message.inboundProperties.'content-length' +  '\n http.query.string = '+message.inboundProperties.'http.query.string'+  '\n accept-language = '+message.inboundProperties.'accept-language'+  '\n postman-token = '+message.inboundProperties.'postman-token'+  '\n http.query.params = '+message.inboundProperties.'http.query.params'+  '\n http.listener.path = '+message.inboundProperties.'http.listener.path'+  '\n http.uri.params = '+message.inboundProperties.'http.uri.params'+  '\n host = '+message.inboundProperties.'host'+  '\n content-type = '+message.inboundProperties.'content-type'+  '\n http.method = '+message.inboundProperties.'http.method'+  '\n caccept-encoding = '+message.inboundProperties.'accept-encoding'+  '\n http.relative.path = '+message.inboundProperties.'http.relative.path'+  '\n http.request.path = '+message.inboundProperties.'http.request.path']  #['\n \n Request Payload is :  \n' +message.payloadAs(java.lang.String)]"
+			level="INFO" doc:name="Instrument Request Payload" category="Instrument || Request Payload"
+			doc:description="Instrument Request Payload Logger" />
+		<json:json-to-object-transformer
+			returnClass="java.util.HashMap" doc:name="JSON to Object" />
+		<scripting:transformer doc:name="Transform Message to Variable" doc:description="Assigning request body into 'requestPayloadVar' . Assigining Nounce value into 'ReqNounce'. Assigining Token into 'ReqToken'. Assigining ProfileId into 'ReqProfileId'   ">
+			<scripting:script engine="Groovy"><![CDATA[import java.util.*
+
+def request_payload = payload
+
+String legalEntity =request_payload.Instrument.LegalEntity
+String currency=request_payload.Instrument.Currency
+def apikeyconfig= new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+
+message.setInvocationProperty('requestPayloadVar',request_payload)
+message.setInvocationProperty('ReqProfileId',request_payload.Client.ProfileId)
+message.setInvocationProperty('ReqNounce',request_payload.Instrument.GatewayNonce)
+message.setInvocationProperty('ReqToken',request_payload.Instrument.GatewayToken)]]></scripting:script>
+		</scripting:transformer>
+		<logger
+			message="#['\n    Profile Id  :  ' +flowVars.ReqProfileId + '\n']  #['Gateway Nounce :  ' +flowVars.ReqNounce +'\n']   #['Gateway Token :  ' +flowVars.ReqToken+'\n']"
+			level="INFO" doc:name="Nonce Profile Token Values"
+			category="Instrument || Profile Id , Nounce Token and Gateway Token"
+			doc:description="Nonce Profile Token Values Logger" />
+		<choice doc:name="Verifying Create or Update"
+			doc:description="Choice for Card Creation,Card Updation  and only Card Creation based on condition of profileId, nounce and Token">
+			<when
+				expression="#[(ReqProfileId == '' ) &amp;&amp; (ReqNounce != '') &amp;&amp; (ReqToken == '')]">
+				<logger
+					message="Qualified for Create Cards : #['\n    Profile Id  :  ' +flowVars.ReqProfileId + '\n']  #['Gateway Nounce :  ' +flowVars.ReqNounce +'\n']   #['Gateway Token :  ' +flowVars.ReqToken+'\n']"
+					level="INFO" doc:name="Invoke Card Creation"
+					category="Instrument || Verify and Create Card, Address Followed By Create Profile"
+					doc:description="Invoke Card Creation logger" />
+				<flow-ref name="preAuthorizationCheckFlow" doc:name="Pre Authorization and Creation"
+					doc:description="Flow-ref for Pre Authorization and Creation" />
+				<logger message="#[payload]" level="INFO"
+					doc:name="Instrument Response Payload" category="Instrument || Create Scenario || Response Payload"
+					doc:description="Instrument Response Payload logger" />
+			</when>
+			<when
+				expression="#[(ReqProfileId != '' ) &amp;&amp; (ReqNounce == '') &amp;&amp; (ReqToken != '')]">
+				<logger
+					message="Qualified for Update Cards : #['\n   Profile Id  :  ' +flowVars.ReqProfileId + '\n']  #['Gateway Nounce :  ' +flowVars.ReqNounce +'\n']   #['Gateway Token :  ' +flowVars.ReqToken+'\n']"
+					level="INFO" doc:name="Invoke Card Updation"
+					category="Instrument || Update Profile , Card and Address"
+					doc:description="Invoke Card Updation Request Payload Logger" />
+				<flow-ref name="compareAndUpdateCustomerInfo-Flow"
+					doc:name="Compare Data and Updation"
+					doc:description="Flow-ref Compare Data and Update Card Profile Address" />
+			</when>
+			<when
+				expression="#[(ReqProfileId != '' ) &amp;&amp; (ReqNounce != '') &amp;&amp; (ReqToken == '')]">
+				<logger
+					message="Qualified for Only Create Cards : #['\n    Profile Id  :  ' +flowVars.ReqProfileId + '\n']  #['Gateway Nounce :  ' +flowVars.ReqNounce +'\n']   #['Gateway Token :  ' +flowVars.ReqToken+'\n']"
+					level="INFO" doc:name="Invoke Only Card Creation" category="Instrument || Only Card Creation"
+					doc:description="Invoke Only Card Creation Request Payload Logger" />
+				<scripting:transformer doc:name="Transform Payload to Create Cards" doc:description="Example Request into Groovy:  {&quot;Instrument&quot;:{&quot;InstrumentId&quot;:&quot;&quot;,&quot;type&quot;:&quot;Card account&quot;,&quot;SubType&quot;:&quot;Visa&quot;,&quot;GatewayNonce&quot;:&quot;SC7eqyCrexu65uvf&quot;,&quot;GatewayToken&quot;:&quot;&quot;,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;Currency&quot;:&quot;GBP&quot;,&quot;HolderName&quot;:&quot;NJogn T Smith&quot;,&quot;Identifier&quot;:&quot;1234&quot;,&quot;ExpiryDate&quot;:&quot;2020-02-29&quot;,&quot;TagName&quot;:&quot;MyHSBCCard&quot;,&quot;AdditionalInfo&quot;:{}},&quot;Client&quot;:{&quot;ClientId&quot;:&quot;12345&quot;,&quot;ProfileId&quot;:&quot;8e62bf2f-1f61-4404-ae6f-e3531727c5a5&quot;,&quot;FirstName&quot;:&quot;John&quot;,&quot;MiddleName&quot;:&quot;&quot;,&quot;LastName&quot;:&quot;Smith&quot;,&quot;DOB&quot;:&quot;&quot;,&quot;Email&quot;:&quot;john.smith@test.com&quot;,&quot;Phone&quot;:&quot;123456789&quot;,&quot;Mobile&quot;:&quot;123456789&quot;,&quot;Address&quot;:&quot;1 Some St&quot;,&quot;City&quot;:&quot;Somewhere&quot;,&quot;State&quot;:&quot;&quot;,&quot;PostCode&quot;:&quot;1234&quot;,&quot;CountryA2&quot;:&quot;AU&quot;,&quot;CountryA3&quot;:&quot;AUS&quot;,&quot;ClientIP&quot;:&quot;12.12.12.12&quot;,&quot;AdditionalInfo&quot;:{&quot;Locale&quot;:&quot;en_GB&quot;}},&quot;AdditionalInfo&quot;:{}}
+Example Response from Groovy: {&quot;singleUseToken&quot;:&quot;SC7eqyCrexu65uvf&quot;}">
+					<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+
+def target_payload = new JsonBuilder()
+def request_payload = flowVars['requestPayloadVar']
+String legalEntity =request_payload.Instrument.LegalEntity
+String currency=request_payload.Instrument.Currency
+def apikeyconfig= new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+target_payload singleUseToken: flowVars.ReqNounce
+return target_payload.toString()]]></scripting:script>
+				</scripting:transformer>
+				<logger message="#[payload]" level="INFO"
+					category="Instrument || Payload to Create Cards" doc:name="Payload for Create Cards"
+					doc:description="Payload to Create Cards Logger" />
+				<flow-ref name="createCardSubFlow" doc:name="createCardSubFlow"
+					doc:description="Flow-ref createCardSubFlow" />
+				<logger message="#[payload]" level="INFO"
+					category="Instrumnet || Response Payload From Create Card"
+					doc:name="Response Payload From Create Card" doc:description="Response Payload From Create Card Logger" />
+				<json:json-to-object-transformer
+					returnClass="java.util.HashMap" doc:name="JSON to Object" />
+				<scripting:transformer doc:name="Transform Payload to Instrument Response" doc:description="Example Request into Groovy : {&quot;status&quot;:&quot;ACTIVE&quot;,&quot;id&quot;:&quot;9a5f8e66-7015-4cd4-aab6-60b33a3d8499&quot;,&quot;cardBin&quot;:&quot;490088&quot;,&quot;lastDigits&quot;:&quot;0008&quot;,&quot;cardExpiry&quot;:{&quot;year&quot;:2023,&quot;month&quot;:4},&quot;cardType&quot;:&quot;VI&quot;,&quot;paymentToken&quot;:&quot;CeGcIwT4M5Ai3WG&quot;,&quot;storedCredentialTokenStatus&quot;:&quot;UNVERIFIED&quot;}
+Example Response from Groovy : {&quot;Instrument&quot;:{&quot;InstrumentId&quot;:&quot;&quot;,&quot;ProfileId&quot;:&quot;8e62bf2f-1f61-4404-ae6f-e3531727c5a5&quot;,&quot;GatewayToken&quot;:&quot;CeGcIwT4M5Ai3WG&quot;,&quot;GatewayResponseCode&quot;:&quot;&quot;,&quot;GatewayResponseMessage&quot;:&quot;&quot;,&quot;GatewayStatus&quot;:&quot;SUCCESS&quot;,&quot;type&quot;:&quot;Card account&quot;,&quot;SubType&quot;:&quot;Visa&quot;,&quot;IsDebit&quot;:&quot;false&quot;,&quot;HolderName&quot;:&quot;NJogn T Smith&quot;,&quot;Identifier&quot;:&quot;0008&quot;,&quot;ExpiryDate&quot;:&quot;2023-4-30&quot;,&quot;IssuedCountry&quot;:&quot;&quot;,&quot;AdditionalInfo&quot;:{}},&quot;Client&quot;:{&quot;ClientId&quot;:&quot;12345&quot;,&quot;AdditionalInfo&quot;:{}}}">
+					<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+import java.util.*
+
+def target_payload = new JsonBuilder()
+def request_payload = flowVars['requestPayloadVar']
+def resCardApi = payload
+def resYear = payload.cardExpiry.year
+def resMonth = payload.cardExpiry.month
+int daysInMonth = new GregorianCalendar(resYear,resMonth.toInteger()-1,1).getActualMaximum(Calendar.DAY_OF_MONTH)
+
+String varDate = resYear + '-' + resMonth + '-' + daysInMonth
+
+def Card_Type=muleContext.getRegistry().get("CardInformation")[payload.cardType.toString()]
+def Is_Debit=muleContext.getRegistry().get("CardIsDebit")[Card_Type]
+
+target_payload Instrument: [
+                InstrumentId: request_payload.Instrument.InstrumentId,
+                ProfileId: request_payload.Client.ProfileId,
+                GatewayToken: resCardApi.paymentToken,
+                GatewayResponseCode : "",
+				GatewayResponseMessage : "",
+				GatewayStatus : "SUCCESS",
+                type: "Card account",
+                SubType: Card_Type,
+                IsDebit: Is_Debit,
+                HolderName: request_payload.Instrument.HolderName,
+                Identifier: resCardApi.lastDigits,
+                ExpiryDate: varDate,
+                IssuedCountry: "",
+                AdditionalInfo: {}
+              ],
+              Client: [
+                ClientId: request_payload.Client.ClientId,
+                AdditionalInfo: {}	
+              ]
+return target_payload.toString()]]></scripting:script>
+				</scripting:transformer>
+				<json:object-to-json-transformer
+					doc:name="Object to JSON" />
+				<logger message="#[payload]" level="INFO"
+					category="Instrument ||  Only Card Creation || Response Payload"
+					doc:name="Instrument Response Payload " doc:description="Instrument Response Payload Logger" />
+			</when>
+			<otherwise>
+				<set-payload value="{     &quot;Message&quot;: &quot;Bad request&quot; } "
+					mimeType="application/json" doc:name="Set Discard Payload" />
+					<set-property doc:name="Set HTTP Status" propertyName="http.status" value="400"/>
+			</otherwise>
+		</choice>
+	</flow>
+	<flow name="preAuthorizationCheckFlow">
+		<logger message="#[flowVars.requestPayloadVar]" level="INFO"
+			doc:name="Request Payload for preAuthorization and Creation"
+			category="Instrument || Request Payload for preAuthorization and Creation"
+			doc:description="Request Payload for preAuthorization and Creation Logger" />
+		<choice doc:name="Is Pre Authorization Required"
+			doc:description="Condition for Enabling  Pre Authorization">
+			<when expression="${PreAuthVerificationEnabled} == true ">
+				<logger level="INFO" doc:name="PreAuthVerificationEnabled Status"
+					category="Instrument || PreAuthVerificationEnabled Status" message="${PreAuthVerificationEnabled}"
+					doc:description="PreAuthVerificationEnabled Status Logger" />
+				<scripting:transformer doc:name="Transform Payload to Pre Authorization API" doc:description="Example Response from Groovy: {&quot;merchantRefNum&quot;:&quot;marchant-9991020180622111421&quot;,&quot;amount&quot;:1,&quot;settleWithAuth&quot;:false,&quot;dupCheck&quot;:true,&quot;card&quot;:{&quot;paymentToken&quot;:&quot;SCHXntvkH2K19qTH&quot;},&quot;profile&quot;:{&quot;firstName&quot;:&quot;John&quot;,&quot;lastName&quot;:&quot;Smith&quot;,&quot;email&quot;:&quot;john.smith@test.com&quot;},&quot;billingDetails&quot;:{&quot;street&quot;:&quot;1 Some St&quot;,&quot;city&quot;:&quot;Somewhere&quot;,&quot;country&quot;:&quot;AU&quot;,&quot;zip&quot;:&quot;1234&quot;,&quot;phone&quot;:&quot;123456789&quot;},&quot;customerIp&quot;:&quot;12.12.12.12&quot;,&quot;description&quot;:&quot;Pre-Auth Checked&quot;}">
+					<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+import java.util.*
+def request_payload = flowVars['requestPayloadVar']
+def target_payload=new JsonBuilder()
+String legalEntity =request_payload.Instrument.LegalEntity
+String currency=request_payload.Instrument.Currency
+def apikeyconfig= new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+String dupCheckVar = ${dupCheck}
+String preAuthDescriptionVar = "${PreAuthDescription}"
+String getAmount = new ClientTokenDetails().getPreAuthAmount(legalEntity,currency,muleContext)
+String[] minor_amount_value = getAmount.split("\\.")
+def minorAmountVar = minor_amount_value[1].toInteger()
+
+String currentTimeUTCVar = new Date().format("yyyyMMddHHmmss", TimeZone.getTimeZone('UTC'))
+println "currentTimeUTCVar : " + currentTimeUTCVar
+
+target_payload   merchantRefNum: request_payload.Client.ClientId + currentTimeUTCVar,
+						 amount: minorAmountVar,
+				 settleWithAuth: false,
+					   dupCheck: ${dupCheck},
+                           card:[
+                                 paymentToken: request_payload.Instrument.GatewayNonce
+                                ],
+                        profile:[
+                                 firstName: request_payload.Client.FirstName,
+								  lastName: request_payload.Client.LastName,
+                                     email: request_payload.Client.Email
+                                ],
+                 billingDetails:[
+                                street: request_payload.Client.Address,
+                                  city: request_payload.Client.City,
+                               country: request_payload.Client.CountryA2,
+                                   zip: request_payload.Client.PostCode,
+                                 phone: request_payload.Client.Phone
+                                ],
+                     customerIp: request_payload.Client.ClientIP,
+                    description: preAuthDescriptionVar
+        
+return target_payload.toString()]]></scripting:script>
+				</scripting:transformer>
+				<json:object-to-json-transformer
+					doc:name="Object to JSON" />
+				<flow-ref name="preAuthorizationSubFlow" doc:name="Invoke Pre Authorization API"
+					doc:description="Flow-ref Invoke Pre Authorization API" />
+				<set-variable variableName="cardStatusVar" value="#[json:status]"
+					doc:name="Set Card Status" doc:description="Storing the  Card Status" />
+				<json:json-to-object-transformer
+					returnClass="java.util.HashMap" doc:name="JSON to Object" />
+				<set-variable variableName="preAuthResponseVar" value="#[payload]"
+					doc:name="Set Response Payload From Pre Authorization API"
+					doc:description="Storing the Response from  preAuthorization API" />
+				<logger message="#['Pre Authorization Status : '+flowVars.cardStatusVar]"
+					level="INFO" category="Instrument || Pre Authorization Status"
+					doc:name="Pre Authorization Status" doc:description="Pre Authorization Status Logger" />
+				<choice doc:name="Verify Card Status" doc:description="Condition for Verify Card Status">
+					<when expression="#[cardStatusVar == 'COMPLETED']">
+						<flow-ref name="createCustomerInfo-SubFlow"
+							doc:name="Create Profile,Card and Address" doc:description="Flow-ref for Create Profile,Card and Address" />
+						<scripting:transformer doc:name="Transform to Instrument Response" doc:description="Example Response from Groovy: {&quot;merchantRefNum&quot;:&quot;marchant-9991020180622111421&quot;,&quot;amount&quot;:1,&quot;settleWithAuth&quot;:false,&quot;dupCheck&quot;:true,&quot;card&quot;:{&quot;paymentToken&quot;:&quot;SCHXntvkH2K19qTH&quot;},&quot;profile&quot;:{&quot;firstName&quot;:&quot;John&quot;,&quot;lastName&quot;:&quot;Smith&quot;,&quot;email&quot;:&quot;john.smith@test.com&quot;},&quot;billingDetails&quot;:{&quot;street&quot;:&quot;1 Some St&quot;,&quot;city&quot;:&quot;Somewhere&quot;,&quot;country&quot;:&quot;AU&quot;,&quot;zip&quot;:&quot;1234&quot;,&quot;phone&quot;:&quot;123456789&quot;},&quot;customerIp&quot;:&quot;12.12.12.12&quot;,&quot;description&quot;:&quot;Pre-Auth Checked&quot;}">
+							<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+import java.util.*
+
+def target_payload = new JsonBuilder()
+def resCardApi = payload[0]
+def resProfileApi = flowVars['setProfileResponseVar']
+def request_payload = flowVars['requestPayloadVar']
+def resPreAuth = flowVars['preAuthResponseVar']
+def resYear = resCardApi.cardExpiry.year
+def resMonth = resCardApi.cardExpiry.month
+int daysInMonth = new GregorianCalendar(resYear,resMonth.toInteger()-1,1).getActualMaximum(Calendar.DAY_OF_MONTH)
+
+String varDate = resYear + '-' + resMonth + '-' + daysInMonth
+
+def Card_Type=muleContext.getRegistry().get("CardInformation")[resCardApi.cardType.toString()]
+def Is_Debit=muleContext.getRegistry().get("CardIsDebit")[Card_Type]
+
+target_payload Instrument: [
+                InstrumentId: request_payload.Instrument.InstrumentId,,
+                ProfileId: resProfileApi.id,
+                GatewayToken: resCardApi.paymentToken,
+				GatewayResponseCode : "",
+				GatewayResponseMessage : "",
+				GatewayStatus : "SUCCESS",				
+                type: "Card account",
+                SubType: Card_Type,
+                IsDebit: Is_Debit,
+                HolderName: request_payload.Instrument.HolderName,
+                Identifier: resCardApi.lastDigits,
+                ExpiryDate: varDate,
+                IssuedCountry: "",
+                AdditionalInfo: [
+				    AVS : resPreAuth.avsResponse,
+					CVV : resPreAuth.cvvVerification
+					
+				]
+              ],
+              Client: [
+                ClientId: resProfileApi.merchantCustomerId,
+                AdditionalInfo: {}
+              ]
+return target_payload.toString()]]></scripting:script>
+						</scripting:transformer>
+						<logger message="#[payload]" level="INFO"
+							category="Instrument || Create Card and Profile || Response Payload "
+							doc:name="Instrument Response Payload " doc:description="Instrument Response Payload Logger " />
+
+					</when>
+					<otherwise>
+						<scripting:transformer
+							doc:name="Transform to Instrument Response when Other Status">
+							<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+
+def target_payload = new JsonBuilder()
+def instrument_data = flowVars['requestPayloadVar']
+
+target_payload Instrument: [
+                InstrumentId: request_payload.Instrument.InstrumentId,
+                ProfileId: "",
+                GatewayToken: "",
+				GatewayResponseCode : "",
+				GatewayResponseMessage : "",
+				GatewayStatus : "FAILED",				
+                type: "",
+                SubType: "",
+                IsDebit: "",
+                HolderName: "",
+                Identifier: "",
+                ExpiryDate: "",
+                IssuedCountry: "",
+                AdditionalInfo: [
+				    AVS : "",
+					CVV : ""
+					
+				]
+              ],
+              Client: [
+                ClientId: request_payload.Client.ClientId,
+                AdditionalInfo: {}
+              ]
+return target_payload.toString()]]></scripting:script>
+						</scripting:transformer>
+						<logger message="#[payload]" level="INFO"
+							doc:name="Discard Status from Verify Card API"
+							category="Instrument || Other Response Status From Verify Card API"
+							doc:description="Discard Status from Verify Card API Logger" />
+					</otherwise>
+				</choice>
+			</when>
+			<when expression="${PreAuthVerificationEnabled} == false">
+				<logger message="${PreAuthVerificationEnabled}" level="INFO"
+					category="Instrument || PreAuthVerificationEnabled Status"
+					doc:name="PreAuthVerificationEnabled Status" doc:description="PreAuthVerificationEnabled Status Logger" />
+				<flow-ref name="createCustomerInfo-SubFlow"
+					doc:name="Create Profile,Card and Address Flow" doc:description="Flow-ref for Create Profile,Card and Address Flow" />
+				<scripting:transformer doc:name="Transform to Instrument Response" doc:description="Response Payload From Groovy: {&quot;Instrument&quot;:{&quot;InstrumentId&quot;:&quot;marchant-99910&quot;,&quot;ProfileId&quot;:&quot;80593a09-5629-4025-8c35-1d4417196f3b&quot;,&quot;GatewayToken&quot;:&quot;CdMOe6sYoXxSeLe&quot;,&quot;GatewayResponseCode&quot;:&quot;&quot;,&quot;GatewayResponseMessage&quot;:&quot;&quot;,&quot;GatewayStatus&quot;:&quot;SUCCESS&quot;,&quot;type&quot;:&quot;Card account&quot;,&quot;SubType&quot;:&quot;Visa&quot;,&quot;IsDebit&quot;:&quot;false&quot;,&quot;HolderName&quot;:&quot;NJogn T Smith&quot;,&quot;Identifier&quot;:&quot;0000&quot;,&quot;ExpiryDate&quot;:&quot;2023-4-30&quot;,&quot;IssuedCountry&quot;:&quot;&quot;,&quot;AdditionalInfo&quot;:{&quot;AVS&quot;:&quot;&quot;,&quot;CVV&quot;:&quot;&quot;}},&quot;Client&quot;:{&quot;ClientId&quot;:&quot;marchant-99910&quot;,&quot;AdditionalInfo&quot;:{}}}">
+					<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+import java.util.*
+
+def target_payload = new JsonBuilder()
+def resCardApi = payload[0]
+def resProfileApi = flowVars['setProfileResponseVar']
+def request_payload = flowVars['requestPayloadVar']
+def resYear = resCardApi.cardExpiry.year
+def resMonth = resCardApi.cardExpiry.month
+int daysInMonth = new GregorianCalendar(resYear,resMonth.toInteger()-1,1).getActualMaximum(Calendar.DAY_OF_MONTH)
+
+String varDate = resYear + '-' + resMonth + '-' + daysInMonth
+
+def Card_Type=muleContext.getRegistry().get("CardInformation")[resCardApi.cardType.toString()]
+def Is_Debit=muleContext.getRegistry().get("CardIsDebit")[Card_Type]
+
+target_payload Instrument: [
+                InstrumentId: request_payload.Instrument.InstrumentId,
+                ProfileId: resProfileApi.id,
+                GatewayToken: resCardApi.paymentToken,
+				GatewayResponseCode : "",
+				GatewayResponseMessage : "",
+				GatewayStatus : "SUCCESS",				
+                type: "Card account",
+                SubType: Card_Type,
+                IsDebit: Is_Debit,
+                HolderName: request_payload.Instrument.HolderName,
+                Identifier: resCardApi.lastDigits,
+                ExpiryDate: varDate,
+                IssuedCountry: "",
+                AdditionalInfo: [
+				    AVS : "",
+					CVV : ""
+					
+				]
+              ],
+              Client: [
+                ClientId: resProfileApi.merchantCustomerId,
+                AdditionalInfo: {}
+              ]
+return target_payload.toString()]]></scripting:script>
+				</scripting:transformer>
+				<logger message="#[payload]" level="INFO"
+					category="Instrument || Create Card and Profile || Response Payload "
+					doc:name="Instrument Response Payload " doc:description="Instrument Response Payload  Logger" />
+			</when>
+		</choice>
+	</flow>
+	<sub-flow name="createCustomerInfo-SubFlow">
+		<logger message="#[flowVars.requestPayloadVar]" level="INFO"
+			category="Instrument || Payload of Instrumnet Request" doc:name="Payload of Instrumnet Request"
+			doc:description="Payload of Instrumnet Request Logger" />
+		<scripting:transformer doc:name="Transform Payload to Create Profile API" doc:description="Example Response from Groovy: {&quot;merchantCustomerId&quot;:&quot;marchant-99910&quot;,&quot;locale&quot;:&quot;en_GB&quot;,&quot;firstName&quot;:&quot;John&quot;,&quot;middleName&quot;:&quot;&quot;,&quot;lastName&quot;:&quot;Smith&quot;,&quot;dateOfBirth&quot;:{&quot;year&quot;:&quot;1980&quot;,&quot;month&quot;:&quot;01&quot;,&quot;day&quot;:&quot;01&quot;},&quot;email&quot;:&quot;john.smith@test.com&quot;,&quot;phone&quot;:&quot;123456789&quot;,&quot;ip&quot;:&quot;12.12.12.12&quot;,&quot;cellPhone&quot;:&quot;123456789&quot;}">
+			<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def request_payload = flowVars['requestPayloadVar']
+String legalEntity =request_payload.Instrument.LegalEntity
+String currency=request_payload.Instrument.Currency
+def apikeyconfig= new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+def target_payload=new JsonBuilder()
+String dob = request_payload.Client.DOB
+String[] tokens_for_dob = dob.split("-")
+
+target_payload merchantCustomerId: request_payload.Client.ClientId,
+                   locale: request_payload.Client.AdditionalInfo.Locale,
+				firstName: request_payload.Client.FirstName,
+			   middleName: request_payload.Client.MiddleName,
+                 lastName: request_payload. Client.LastName,
+              dateOfBirth: [     
+                    year: tokens_for_dob[0],    
+                   month: tokens_for_dob[1],    
+                     day: tokens_for_dob[2]       
+                     ],                 
+                   email: request_payload.Client.Email,
+                   phone: request_payload.Client.Phone,
+                      ip: request_payload.Client.ClientIP,                  
+               cellPhone: request_payload.Client.Mobile
+        
+return target_payload.toString()]]></scripting:script>
+		</scripting:transformer>
+		<logger message="#[payload]" level="INFO"
+			doc:name="Request  Payload to Create Profile" doc:description="Request  Payload to Create Profile Logger" />
+		<flow-ref name="createProfileSubFlow" doc:name="createProfileSubFlow"
+			doc:description="Flow-ref for createProfileSubFlow" />
+		<logger message="#[message.payloadAs(java.lang.String)]" level="INFO"
+			category="Instrument || Response Payload From Create Profile"
+			doc:name="Response Payload From Create Profile" doc:description="Response Payload From Create Profile Logger" />
+		<json:json-to-object-transformer
+			returnClass="java.util.HashMap" doc:name="JSON to Object" />
+		<set-variable variableName="setProfileResponseVar" value="#[payload]"
+			doc:name="Set Create Profile Response" doc:description="Stroring Response from Create Profile " />
+		<scatter-gather doc:name="Scatter-Gather"
+			doc:description="Parallel Processing the Create Card and Create Address Flows">
+			<processor-chain>
+				<scripting:transformer doc:name="Transform Payload to Create Card" doc:description="Example Request into Groovy:  {&quot;id&quot;:&quot;80593a09-5629-4025-8c35-1d4417196f3b&quot;,&quot;status&quot;:&quot;ACTIVE&quot;,&quot;merchantCustomerId&quot;:&quot;marchant-99910&quot;,&quot;locale&quot;:&quot;en_GB&quot;,&quot;firstName&quot;:&quot;John&quot;,&quot;middleName&quot;:&quot;&quot;,&quot;lastName&quot;:&quot;Smith&quot;,&quot;dateOfBirth&quot;:{&quot;year&quot;:1980,&quot;month&quot;:1,&quot;day&quot;:1},&quot;ip&quot;:&quot;12.12.12.12&quot;,&quot;paymentToken&quot;:&quot;Pz93j8eZE2EPvCl&quot;,&quot;phone&quot;:&quot;123456789&quot;,&quot;cellPhone&quot;:&quot;123456789&quot;,&quot;email&quot;:&quot;john.smith@test.com&quot;}
+Example Response from Groovy:  {&quot;singleUseToken&quot;:&quot;SCHXntvkH2K19qTH&quot;}">
+					<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+
+def request_payload = payload
+flowVars['ReqProfileId']= request_payload.id
+
+def target_payload = new JsonBuilder()
+target_payload singleUseToken: flowVars.ReqNounce
+return target_payload.toString()]]></scripting:script>
+				</scripting:transformer>
+				<logger
+					message="#['Request  Payload to Create Card : ' +payload + '\nProfile ID for Create Card : '+flowVars.ReqProfileId]"
+					level="INFO" category="Instrument || Request  Payload to Create Card"
+					doc:name="Request  Payload to Create Card" doc:description="Request  Payload to Create Card Logger" />
+				<flow-ref name="createCardSubFlow" doc:name="Invoke Create Card SubFlow"
+					doc:description="Flow-ref for Invoke Create Card SubFlow" />
+				<json:json-to-object-transformer
+					returnClass="java.util.HashMap" doc:name="JSON to Object" />
+			</processor-chain>
+			<processor-chain>
+				<scripting:transformer doc:name="Transform Payload to Create Address" doc:description="Example Request into Groovy:  {&quot;id&quot;:&quot;80593a09-5629-4025-8c35-1d4417196f3b&quot;,&quot;status&quot;:&quot;ACTIVE&quot;,&quot;merchantCustomerId&quot;:&quot;marchant-99910&quot;,&quot;locale&quot;:&quot;en_GB&quot;,&quot;firstName&quot;:&quot;John&quot;,&quot;middleName&quot;:&quot;&quot;,&quot;lastName&quot;:&quot;Smith&quot;,&quot;dateOfBirth&quot;:{&quot;year&quot;:1980,&quot;month&quot;:1,&quot;day&quot;:1},&quot;ip&quot;:&quot;12.12.12.12&quot;,&quot;paymentToken&quot;:&quot;Pz93j8eZE2EPvCl&quot;,&quot;phone&quot;:&quot;123456789&quot;,&quot;cellPhone&quot;:&quot;123456789&quot;,&quot;email&quot;:&quot;john.smith@test.com&quot;}
+Example Response from Groovy:  {&quot;street&quot;:&quot;1 Some St&quot;,&quot;city&quot;:&quot;Somewhere&quot;,&quot;zip&quot;:&quot;1234&quot;,&quot;country&quot;:&quot;AU&quot;,&quot;state&quot;:&quot;ON&quot;,&quot;phone&quot;:&quot;123456789&quot;}
+">
+					<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def target_payload=new JsonBuilder()
+def request_payload = flowVars['requestPayloadVar']
+String legalEntity =request_payload.Instrument.LegalEntity
+String currency=request_payload.Instrument.Currency
+def apikeyconfig= new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+def profile_response_payload = payload
+
+flowVars['ReqProfileId']= profile_response_payload.id
+
+target_payload street: request_payload.Client.Address,       
+       city: request_payload.Client.City,
+       zip: request_payload.Client.PostCode,
+       country: request_payload.Client.CountryA2,
+       state: request_payload.Client.State,       
+       phone: request_payload.Client.Phone       
+        
+return target_payload.toString()]]></scripting:script>
+				</scripting:transformer>
+				<logger
+					message="#['Request  Payload to Create Address : '+payload +'\n Profile ID For Create Address: ' +flowVars.ReqProfileId]"
+					level="INFO" category="Instrument || Request  Payload to Create Address"
+					doc:name="Request  Payload to Create Address" doc:description="Request  Payload to Create Address Logger" />
+				<flow-ref name="createAddressSubFlow" doc:name="Invoke Create Address SubFlow"
+					doc:description="Flow-ref for Create Address Flow" />
+				<json:json-to-object-transformer
+					returnClass="java.util.HashMap" doc:name="JSON to Object" />
+			</processor-chain>
+
+		</scatter-gather>
+		<logger message="#[payload]" level="INFO"
+			category="Instrument || Collection Response || Create Address and Create Card"
+			doc:name="Collection Response from Create Address and Create Card"
+			doc:description="Collection Response from Create Address and Create Card Logger" />
+	</sub-flow>
+	<flow name="compareAndUpdateCustomerInfo-Flow">
+		<http:request config-ref="HTTP_Paysafe_API_Configuration"
+			path="customervault/v1/profiles/{PROFILE_ID}" method="GET"
+			doc:name="Get Profile API" doc:description="call to Get Profile API">
+			<http:request-builder>
+                <http:query-param paramName="fields" value="addresses,cards"/>
+                <http:uri-param paramName="PROFILE_ID" value="#[flowVars.ReqProfileId]"/>
+                <http:header headerName="Content-Type" value="application/json"/>
+                <http:header headerName="Authorization" value="#[flowVars.Apikey]"/>
+
+			</http:request-builder>
+		</http:request>
+		<logger message="#[message.payloadAs(java.lang.String)]" level="INFO"
+			category="Response Payload From Get Profile" doc:name="Response Payload From Get Profile"
+			doc:description="Response Payload From Get Profile Logger" />
+		<set-variable variableName="AddressIdVar" value="#[json:addresses[0]/id]"
+			doc:name="Set Address ID" doc:description="Stroing the AddressID from Get Profile" />
+		<json:json-to-object-transformer
+			returnClass="java.util.HashMap" doc:name="JSON to Object" />
+		<scripting:transformer doc:name="Transform to Instrument Type" doc:description="Example Request into Groovy: {&quot;id&quot;:&quot;80593a09-5629-4025-8c35-1d4417196f3b&quot;,&quot;status&quot;:&quot;ACTIVE&quot;,&quot;merchantCustomerId&quot;:&quot;marchant-99910&quot;,&quot;locale&quot;:&quot;en_GB&quot;,&quot;firstName&quot;:&quot;John&quot;,&quot;lastName&quot;:&quot;Smith&quot;,&quot;dateOfBirth&quot;:{&quot;year&quot;:1980,&quot;month&quot;:1,&quot;day&quot;:1},&quot;ip&quot;:&quot;12.12.12.12&quot;,&quot;paymentToken&quot;:&quot;Pz93j8eZE2EPvCl&quot;,&quot;phone&quot;:&quot;123456789&quot;,&quot;cellPhone&quot;:&quot;123456789&quot;,&quot;email&quot;:&quot;john.smith@test.com&quot;,&quot;addresses&quot;:[{&quot;id&quot;:&quot;fda57b42-95f0-4a00-8487-d87fee57a5e9&quot;,&quot;street&quot;:&quot;1 Some St&quot;,&quot;city&quot;:&quot;Somewhere&quot;,&quot;country&quot;:&quot;AU&quot;,&quot;state&quot;:&quot;ON&quot;,&quot;zip&quot;:&quot;1234&quot;,&quot;phone&quot;:&quot;123456789&quot;,&quot;defaultShippingAddressIndicator&quot;:false,&quot;status&quot;:&quot;ACTIVE&quot;}],&quot;cards&quot;:[{&quot;status&quot;:&quot;ACTIVE&quot;,&quot;id&quot;:&quot;6eea6806-1df5-448b-a039-106f3568bc88&quot;,&quot;cardBin&quot;:&quot;403711&quot;,&quot;lastDigits&quot;:&quot;0000&quot;,&quot;cardExpiry&quot;:{&quot;year&quot;:2023,&quot;month&quot;:4},&quot;cardType&quot;:&quot;VI&quot;,&quot;paymentToken&quot;:&quot;CdMOe6sYoXxSeLe&quot;,&quot;defaultCardIndicator&quot;:true}]}">
+			<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def Request_payload = flowVars['requestPayloadVar']
+def Profile_Response = payload
+def target_payload=new JsonBuilder()
+def cardInfo
+int daysVar = 1 
+for (item in payload.cards){
+
+     if (item.paymentToken == Request_payload.Instrument.GatewayToken){
+	     
+		 cardInfo = item
+		 break
+		 		  
+	 } else {
+	     
+	     cardInfo =[status:"", id:"", cardBin:"", lastDigits:"", cardExpiry:[year:"", month:""], holderName:"", nickName:"", merchantRefNum:"", cardType:"", paymentToken:"", defaultCardIndicator:""]   
+	 }
+}
+
+message.setInvocationProperty('cardIdVar',cardInfo.id)
+
+def Card_Type=muleContext.getRegistry().get("CardInformation")[cardInfo.cardType.toString()]
+
+target_payload 	Instrument: [
+			InstrumentId: "",
+			type: "",
+			SubType: Card_Type,
+			GatewayNonce: "",
+			GatewayToken: cardInfo.paymentToken,
+			LegalEntity: "",
+			Currency: "",
+			HolderName: cardInfo.holderName,
+			Identifier: cardInfo.lastDigits,
+			ExpiryDate: cardInfo.cardExpiry.year + '-' + cardInfo.cardExpiry.month,
+			TagName: cardInfo.nickName		
+			],
+		Client: [
+			ClientId: Profile_Response.merchantCustomerId,
+			ProfileId: Profile_Response.id,
+			FirstName: Profile_Response.firstName,
+			MiddleName: Profile_Response.middleName,
+			LastName: Profile_Response.lastName,
+			DOB: Profile_Response.dateOfBirth.year + '-' + Profile_Response.dateOfBirth.month + '-' + Profile_Response.dateOfBirth.day,
+			Email: Profile_Response.email,
+			Phone:Profile_Response.phone,
+			Mobile: Profile_Response.cellPhone,
+			Address: Profile_Response.addresses[0].street,
+			City: Profile_Response.addresses[0].city,
+			State: Profile_Response.addresses[0].state,
+			PostCode: Profile_Response.addresses[0].zip,
+			CountryA2: Profile_Response.addresses[0].country,
+			CountryA3: "",
+			ClientIP: Profile_Response.ip,
+            AdditionalInfo:[
+		                    Locale: Profile_Response.locale
+					       ]			
+		]
+		      
+        
+return target_payload.toString()]]></scripting:script>
+		</scripting:transformer>
+		<logger message="#[payload]" level="INFO" category="Instrument Type Payload"
+			doc:name="Instrument Type Payload" doc:description="Instrument Type Payload Logger" />
+		<json:json-to-object-transformer
+			returnClass="java.util.HashMap" doc:name="JSON to Object" />
+		<scripting:transformer doc:name="Compare Paysafe and Instrumet Payload" doc:description="Example Request into Groovy (Paysafe Data) : {&quot;Instrument&quot;:{&quot;InstrumentId&quot;:&quot;&quot;,&quot;type&quot;:&quot;&quot;,&quot;SubType&quot;:&quot;Visa&quot;,&quot;GatewayNonce&quot;:&quot;&quot;,&quot;GatewayToken&quot;:&quot;CdMOe6sYoXxSeLe&quot;,&quot;LegalEntity&quot;:&quot;&quot;,&quot;Currency&quot;:&quot;&quot;,&quot;HolderName&quot;:null,&quot;Identifier&quot;:&quot;0000&quot;,&quot;ExpiryDate&quot;:&quot;2023-4&quot;,&quot;TagName&quot;:null},&quot;Client&quot;:{&quot;ClientId&quot;:&quot;marchant-99910&quot;,&quot;ProfileId&quot;:&quot;80593a09-5629-4025-8c35-1d4417196f3b&quot;,&quot;FirstName&quot;:&quot;John&quot;,&quot;MiddleName&quot;:null,&quot;LastName&quot;:&quot;Smith&quot;,&quot;DOB&quot;:&quot;1980-1-1&quot;,&quot;Email&quot;:&quot;john.smith@test.com&quot;,&quot;Phone&quot;:&quot;123456789&quot;,&quot;Mobile&quot;:&quot;123456789&quot;,&quot;Address&quot;:&quot;1 Some St&quot;,&quot;City&quot;:&quot;Somewhere&quot;,&quot;State&quot;:&quot;ON&quot;,&quot;PostCode&quot;:&quot;1234&quot;,&quot;CountryA2&quot;:&quot;AU&quot;,&quot;CountryA3&quot;:&quot;&quot;,&quot;ClientIP&quot;:&quot;12.12.12.12&quot;,&quot;AdditionalInfo&quot;:{&quot;Locale&quot;:&quot;en_GB&quot;}}}">
+			<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def target_payload = new JsonBuilder()
+
+def paysafe_data = payload
+def instrument_data = flowVars['requestPayloadVar']
+String update_required
+String update_profile_required
+String update_card_required
+String update_address_required
+
+String expdate = instrument_data.Instrument.ExpiryDate
+String[] tokens_for_expdate = expdate.split("-")
+String card_expiry_date = tokens_for_expdate[0] + '-' + tokens_for_expdate[1].toInteger()
+
+String dob = instrument_data.Client.DOB
+String[] tokens_for_dob = dob.split("-")
+String client_dob = tokens_for_dob[0] + '-' + tokens_for_dob[1].toInteger() + '-' + tokens_for_dob[2].toInteger()
+
+if ( paysafe_data.Client.MiddleName == null) {
+    
+    paysafe_data.Client.MiddleName = ""
+} 
+
+
+if (instrument_data.Client.ClientId != paysafe_data.Client.ClientId || instrument_data.Client.AdditionalInfo.Locale != paysafe_data.Client.AdditionalInfo.Locale || instrument_data.Client.FirstName != paysafe_data.Client.FirstName || instrument_data.Client.MiddleName != paysafe_data.Client.MiddleName || instrument_data.Client.LastName != paysafe_data.Client.LastName || client_dob != paysafe_data.Client.DOB || instrument_data.Client.Email != paysafe_data.Client.Email || instrument_data.Client.Phone != paysafe_data.Client.Phone || instrument_data.Client.ClientIP != paysafe_data.Client.ClientIP || instrument_data.Client.Mobile != paysafe_data.Client.Mobile ) {
+    println " Profile updattion is required"
+    message.setInvocationProperty('updateProfileRequiredVar','Yes')
+	update_profile_required = "Yes"
+} else {
+    update_profile_required = "No"
+}
+
+if ( instrument_data.Instrument.TagName != paysafe_data.Instrument.TagName || instrument_data.Instrument.HolderName != paysafe_data.Instrument.HolderName || instrument_data.Instrument.Identifier != paysafe_data.Instrument.Identifier || card_expiry_date != paysafe_data.Instrument.ExpiryDate.toString() || instrument_data.Instrument.SubType != paysafe_data.Instrument.SubType || instrument_data.Instrument.GatewayToken != paysafe_data.Instrument.GatewayToken) {
+    println " Card updattion is required"
+    message.setInvocationProperty('updateCardRequiredVar','Yes')
+	update_card_required = "Yes"
+} else {
+    update_card_required = "No"
+}
+
+if ( instrument_data.Client.Address != paysafe_data.Client.Address || instrument_data.Client.City != paysafe_data.Client.City || instrument_data.Client.PostCode != paysafe_data.Client.PostCode || instrument_data.Client.CountryA2 != paysafe_data.Client.CountryA2 || instrument_data.Client.State != paysafe_data.Client.State ) {
+    println " Address updattion is required"
+    message.setInvocationProperty('updateAddressRequiredVar','Yes')
+	update_address_required = "Yes"
+} else {
+    update_address_required = "No"
+}
+
+if (update_profile_required == 'Yes' || update_card_required == 'Yes' || update_address_required == 'Yes'){
+    update_required = "Yes"
+} else {
+    update_required = "No"
+}
+
+message.setInvocationProperty('updateRequiredVar',update_required)
+
+]]></scripting:script>
+		</scripting:transformer>
+		<choice doc:name="Is Update Required" doc:description="Checking the Condition for Update">
+			<when expression="#[flowVars.updateRequiredVar == 'Yes']">
+				<scatter-gather doc:name="Scatter-Gather"
+					doc:description="Parallel processing the update card,update address and update profile Flows">
+					<processor-chain>
+						<logger message="#[flowVars.updateCardRequiredVar]" level="INFO"
+							category="Card Update Value" doc:name="Card Update Value" />
+						<choice doc:name="is Card Update Required" doc:description="Checking the condition for Card Update">
+							<when expression="#[flowVars.updateCardRequiredVar == 'Yes']">
+
+								<scripting:transformer doc:name="Transform Payload to Update Card" doc:description="Example Response from Groovy: {&quot;cardExpiry&quot;:{&quot;month&quot;:&quot;02&quot;,&quot;year&quot;:&quot;2020&quot;},&quot;nickName&quot;:&quot;MyHSBCCard&quot;,&quot;merchantRefNum&quot;:&quot;marchant-99910&quot;,&quot;holderName&quot;:&quot;NJogn T Smith TT&quot;}">
+									<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def request_payload = flowVars['requestPayloadVar']
+def target_payload=new JsonBuilder()
+String dob = request_payload.Instrument.ExpiryDate
+String[] tokens_for_dob = dob.split("-")
+
+String legalEntity =request_payload.Instrument.LegalEntity
+String currency=request_payload.Instrument.Currency
+def apikeyconfig= new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+
+target_payload    cardExpiry: [
+						month: tokens_for_dob[1],
+						year: tokens_for_dob[0]
+					  ],
+			nickName: request_payload.Instrument.TagName,
+	  merchantRefNum: request_payload.Instrument.InstrumentId,
+		  holderName: request_payload.Instrument.HolderName     				  
+            
+return target_payload.toString()]]></scripting:script>
+								</scripting:transformer>
+								<logger message="#[payload]" level="INFO"
+									category="Payload to Update Card" doc:name="Payload to Update Card"
+									doc:description="Payload to Update Card Logger" />
+								<http:request config-ref="HTTP_Paysafe_API_Configuration"
+									path="/customervault/v1/profiles/{PROFILE_ID}/cards/{CARD_ID}"
+									method="PUT" doc:name="Update Card API" doc:description="Call to Update Card API">
+									<http:request-builder>
+                                        <http:uri-param paramName="PROFILE_ID" value="#[flowVars.ReqProfileId]"/>
+                                        <http:uri-param paramName="CARD_ID" value="#[flowVars.cardIdVar]"/>
+                                        <http:header headerName="Content-Type" value="application/json"/>
+                                        <http:header headerName="Authorization" value="#[flowVars.Apikey]"/>
+
+									</http:request-builder>
+								</http:request>
+								<logger message="#[message.payloadAs(java.lang.String)]"
+									level="INFO" category="Response Payload From Update Card"
+									doc:name="Response Payload From Update Card" doc:description="Response Payload From Update Card Logger" />
+								<json:json-to-object-transformer
+									returnClass="java.util.HashMap" doc:name="JSON to Object" />
+							</when>
+							<otherwise>
+								<set-payload
+									value="{
+	&quot;cardUpdateStatus&quot;: &quot;Not Required&quot;
+}"
+									doc:name="Set Card Update Status" mimeType="application/json"
+									doc:description="Scalar Message for card Update Status" />
+								<json:json-to-object-transformer
+									returnClass="java.util.HashMap" doc:name="JSON to Object" />
+							</otherwise>
+
+						</choice>
+					</processor-chain>
+					<processor-chain>
+						<logger message="#[flowVars.updateProfileRequiredVar]"
+							level="INFO" category="Profile Update Value" doc:name="Profile Update Value" />
+						<choice doc:name="Is Profile Update Required"
+							doc:description="Checking the condition for profile update">
+							<when expression="#[flowVars.updateProfileRequiredVar == 'Yes']">
+								<scripting:transformer doc:name="Transform Payload to Update Profile" doc:description="Example Response from Groovy: {&quot;status&quot;:&quot;ACTIVE&quot;,&quot;merchantCustomerId&quot;:&quot;marchant-99910&quot;,&quot;locale&quot;:&quot;en_GB&quot;,&quot;firstName&quot;:&quot;John&quot;,&quot;middleName&quot;:&quot;&quot;,&quot;lastName&quot;:&quot;Smith S&quot;,&quot;dateOfBirth&quot;:{&quot;year&quot;:&quot;1980&quot;,&quot;month&quot;:&quot;01&quot;,&quot;day&quot;:&quot;01&quot;},&quot;email&quot;:&quot;john.smith@test.com&quot;,&quot;phone&quot;:&quot;123456789&quot;,&quot;ip&quot;:&quot;12.12.12.12&quot;,&quot;cellPhone&quot;:&quot;123456789&quot;}">
+									<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def request_payload = flowVars['requestPayloadVar']
+def target_payload=new JsonBuilder()
+String dob = request_payload.Client.DOB
+String[] tokens_for_dob = dob.split("-")
+
+String legalEntity =request_payload.Instrument.LegalEntity
+String currency=request_payload.Instrument.Currency
+def apikeyconfig= new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+
+target_payload             status: "ACTIVE",
+       merchantCustomerId: request_payload.Client.ClientId,
+				   locale: request_payload.Client.AdditionalInfo.Locale,
+				firstName: request_payload.Client.FirstName,
+			   middleName: request_payload.Client.MiddleName,
+                 lastName: request_payload. Client.LastName,
+              dateOfBirth: [     
+                           year: tokens_for_dob[0],    
+                           month: tokens_for_dob[1],    
+                           day: tokens_for_dob[2]       
+                           ],                 
+                    email: request_payload.Client.Email,
+                    phone: request_payload.Client.Phone,
+                       ip: request_payload.Client.ClientIP,                   				  
+                cellPhone: request_payload.Client.Mobile
+        
+return target_payload.toString()]]></scripting:script>
+								</scripting:transformer>
+								<logger message="#[payload]" level="INFO"
+									category="Payload to Update Profile" doc:name="Payload to Update Profile"
+									doc:description="Payload to Update Profile Logger" />
+								<http:request config-ref="HTTP_Paysafe_API_Configuration"
+									path="/customervault/v1/profiles/{PROFILE_ID}" method="PUT"
+									doc:name="Update Profile API" doc:description="Call to Update Profile API">
+									<http:request-builder>
+                                        <http:uri-param paramName="PROFILE_ID" value="#[flowVars.ReqProfileId]"/>
+                                        <http:header headerName="Content-Type" value="application/json"/>
+                                        <http:header headerName="Authorization" value="#[flowVars.Apikey]"/>
+
+									</http:request-builder>
+								</http:request>
+								<logger message="#[message.payloadAs(java.lang.String)]"
+									level="INFO" category="Response Payload From Update Profile"
+									doc:name="Response Payload From Update Profile"
+									doc:description="Response Payload From Update Profile Logger" />
+								<json:json-to-object-transformer
+									returnClass="java.util.HashMap" doc:name="JSON to Object" />
+							</when>
+							<otherwise>
+								<set-payload
+									value="{
+	&quot;profileUpdateStatus&quot;: &quot;Not Required&quot;
+}"
+									doc:name="Set Profile Update Status" mimeType="application/json"
+									doc:description="Scalar Message for Update Profile Status" />
+								<json:json-to-object-transformer
+									returnClass="java.util.HashMap" doc:name="JSON to Object" />
+							</otherwise>
+
+						</choice>
+
+					</processor-chain>
+
+					<processor-chain>
+						<logger message="#[flowVars.updateAddressRequiredVar]"
+							level="INFO" category="Address Update Value" doc:name="Address Update Value" />
+						<choice doc:name="is Address Update Required"
+							doc:description="Checking the condition for  update address">
+							<when expression="#[flowVars.updateAddressRequiredVar == 'Yes']">
+
+								<scripting:transformer doc:name="Transform Payload to Update Address" doc:description="Example Response from Groovy: {&quot;street&quot;:&quot; Some St&quot;,&quot;city&quot;:&quot;Somewhere&quot;,&quot;zip&quot;:&quot;1234&quot;,&quot;country&quot;:&quot;AU&quot;,&quot;state&quot;:&quot;ON&quot;,&quot;phone&quot;:&quot;123456789&quot;}">
+									<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def request_payload = flowVars['requestPayloadVar']
+def target_payload=new JsonBuilder()
+
+String legalEntity =request_payload.Instrument.LegalEntity
+String currency=request_payload.Instrument.Currency
+def apikeyconfig= new ClientTokenDetails().getApikeyAndMerchantId(legalEntity,currency,muleContext,message)
+
+target_payload    street: request_payload.Client.Address,         
+		    city: request_payload.Client.City,
+			 zip: request_payload.Client.PostCode,
+         country: request_payload.Client.CountryA2,                             
+           state: request_payload.Client.State,   
+           phone: request_payload.Client.Phone            				  
+            
+return target_payload.toString()]]></scripting:script>
+								</scripting:transformer>
+								<logger
+									message="#['AddressId value : '+flowVars.AddressIdVar+'\n ProfileId value :  '+flowVars.ReqProfileId+'\n Payload to update address\n'+payload]"
+									level="INFO" category="Payload to Update Address" doc:name="Payload to Update Address"
+									doc:description="Payload to Update Address Logger" />
+								<http:request config-ref="HTTP_Paysafe_API_Configuration"
+									path="customervault/v1/profiles/{PROFILE_ID}/addresses/{ADDRESS_ID}"
+									method="PUT" doc:name="Update Address API" doc:description="Call to Update Address API">
+									<http:request-builder>
+                                        <http:uri-param paramName="PROFILE_ID" value="#[flowVars.ReqProfileId]"/>
+                                        <http:uri-param paramName="ADDRESS_ID" value="#[flowVars.AddressIdVar]"/>
+                                        <http:header headerName="Content-Type" value="application/json"/>
+                                        <http:header headerName="Authorization" value="#[flowVars.Apikey]"/>
+
+
+									</http:request-builder>
+								</http:request>
+								<logger message="#[message.payloadAs(java.lang.String)]"
+									level="INFO" category="Response Payload From Update Address"
+									doc:name="Response Payload From Update Address"
+									doc:description="Response Payload From Update Address Logger" />
+								<json:json-to-object-transformer
+									returnClass="java.util.HashMap" doc:name="JSON to Object" />
+							</when>
+							<otherwise>
+								<set-payload
+									value="{
+	&quot;addressUpdateStatus&quot;: &quot;Not Required&quot;
+}"
+									doc:name="Set Update Address Status" mimeType="application/json"
+									doc:description="Scalar Message for Update Address Status" />
+								<json:json-to-object-transformer
+									returnClass="java.util.HashMap" doc:name="JSON to Object" />
+							</otherwise>
+						</choice>
+					</processor-chain>
+
+
+				</scatter-gather>
+				<logger message="#[payload] " level="INFO"
+					category="Collection Response Update Card Updare Profile and Update Address"
+					doc:name="Collection Response Update Card Updare Profile and Update Address"
+					doc:description="Collection Response Update Card Updare Profile and Update Address logger" />
+
+				<choice doc:name="Route to Instrument Response"
+					doc:description="Checking the condition for routing the instrument response">
+					<when
+						expression="#[(flowVars.updateCardRequiredVar == 'Yes' ) &amp;&amp; (flowVars.updateProfileRequiredVar == 'Yes')]">
+						<scripting:transformer
+							doc:name="Transform Update Card and Update Profile Responses to Instrument" doc:description="Example Response from Groovy: {&quot;Instrument&quot;:{&quot;InstrumentId&quot;:&quot;marchant-99910&quot;,&quot;ProfileId&quot;:&quot;80593a09-5629-4025-8c35-1d4417196f3b&quot;,&quot;GatewayToken&quot;:&quot;CdMOe6sYoXxSeLe&quot;,&quot;GatewayResponseCode&quot;:&quot;&quot;,&quot;GatewayResponseMessage&quot;:&quot;&quot;,&quot;GatewayStatus&quot;:&quot;SUCCESS&quot;,&quot;type&quot;:&quot;Card account&quot;,&quot;SubType&quot;:&quot;Visa&quot;,&quot;IsDebit&quot;:&quot;false&quot;,&quot;HolderName&quot;:&quot;NJogn T Smith TT&quot;,&quot;Identifier&quot;:&quot;0000&quot;,&quot;ExpiryDate&quot;:&quot;2020-2-29&quot;,&quot;IssuedCountry&quot;:&quot;&quot;,&quot;AdditionalInfo&quot;:{}},&quot;Client&quot;:{&quot;ClientId&quot;:&quot;marchant-99910&quot;,&quot;AdditionalInfo&quot;:{}}}">
+							<scripting:script engine="Groovy"><![CDATA[
+import groovy.json.*
+import java.util.*
+
+def target_payload = new JsonBuilder()
+def request_payload = flowVars['requestPayloadVar']
+def resUpdateProfileApi = payload[1]
+def resUpdateCardApi = payload[0]
+def resYear = resUpdateCardApi.cardExpiry.year
+def resMonth = resUpdateCardApi.cardExpiry.month
+int daysInMonth = new GregorianCalendar(resYear,resMonth.toInteger()-1,1).getActualMaximum(Calendar.DAY_OF_MONTH)
+
+String varDate = resYear + '-' + resMonth + '-' + daysInMonth
+def Card_Type=muleContext.getRegistry().get("CardInformation")[resUpdateCardApi.cardType.toString()]
+def Is_Debit=muleContext.getRegistry().get("CardIsDebit")[Card_Type]
+
+target_payload Instrument: [
+                InstrumentId: request_payload.Instrument.InstrumentId,
+                ProfileId: resUpdateProfileApi.id,
+                GatewayToken: resUpdateCardApi.paymentToken,
+                GatewayResponseCode : "",
+				GatewayResponseMessage : "",
+				GatewayStatus : "SUCCESS",
+                type: request_payload.Instrument.type,
+                SubType: Card_Type,
+                IsDebit: Is_Debit,
+                HolderName: resUpdateCardApi.holderName,
+                Identifier: resUpdateCardApi.lastDigits,
+                ExpiryDate: varDate,
+                IssuedCountry: "",
+                AdditionalInfo: {}
+              ],
+              Client: [
+                ClientId: resUpdateProfileApi.merchantCustomerId ,
+                AdditionalInfo: {}
+              ]
+return target_payload.toString()]]></scripting:script>
+						</scripting:transformer>
+						<logger message="#[payload]" level="INFO"
+							category="Instrument Response Payload for Update  Card and Profile"
+							doc:name="Instrument Response Payload for Update  Card and Profile" />
+					</when>
+					<when expression="#[flowVars.updateCardRequiredVar == 'Yes']">
+						<scripting:transformer
+							doc:name="Transform Update Card Response to Instrument" doc:description="Example Response from Groovy:{&quot;Instrument&quot;:{&quot;InstrumentId&quot;:&quot;marchant-99910&quot;,&quot;ProfileId&quot;:&quot;80593a09-5629-4025-8c35-1d4417196f3b&quot;,&quot;GatewayToken&quot;:&quot;CdMOe6sYoXxSeLe&quot;,&quot;GatewayResponseCode&quot;:&quot;&quot;,&quot;GatewayResponseMessage&quot;:&quot;&quot;,&quot;GatewayStatus&quot;:&quot;SUCCESS&quot;,&quot;type&quot;:&quot;Card account&quot;,&quot;SubType&quot;:&quot;Visa&quot;,&quot;IsDebit&quot;:&quot;false&quot;,&quot;HolderName&quot;:&quot;NJogn T Smith SS&quot;,&quot;Identifier&quot;:&quot;0000&quot;,&quot;ExpiryDate&quot;:&quot;2020-2-29&quot;,&quot;IssuedCountry&quot;:&quot;&quot;,&quot;AdditionalInfo&quot;:{}},&quot;Client&quot;:{&quot;ClientId&quot;:&quot;&quot;,&quot;AdditionalInfo&quot;:{}}}">
+							<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+import java.util.*
+
+def target_payload = new JsonBuilder()
+def request_payload = flowVars['requestPayloadVar']
+def resUpdateCardApi = payload[0]
+def resYear = resUpdateCardApi.cardExpiry.year
+def resMonth = resUpdateCardApi.cardExpiry.month
+int daysInMonth = new GregorianCalendar(resYear,resMonth.toInteger()-1,1).getActualMaximum(Calendar.DAY_OF_MONTH)
+
+String varDate = resYear + '-' + resMonth + '-' + daysInMonth
+def Card_Type=muleContext.getRegistry().get("CardInformation")[resUpdateCardApi.cardType.toString()]
+def Is_Debit=muleContext.getRegistry().get("CardIsDebit")[Card_Type]
+
+
+target_payload Instrument: [
+                InstrumentId: request_payload.Instrument.InstrumentId,
+                ProfileId: flowVars['ReqProfileId'],
+                GatewayToken: resUpdateCardApi.paymentToken,
+                GatewayResponseCode : "",
+				GatewayResponseMessage : "",
+				GatewayStatus : "SUCCESS",
+                type: request_payload.Instrument.type,
+                SubType: Card_Type,
+                IsDebit: Is_Debit,
+                HolderName: resUpdateCardApi.holderName,
+                Identifier: resUpdateCardApi.lastDigits,
+                ExpiryDate: varDate,
+                IssuedCountry: "",
+                AdditionalInfo: {}
+              ],
+              Client: [
+                ClientId: request_payload.Client.ClientId,
+                AdditionalInfo: {}
+              ]
+return target_payload.toString()]]></scripting:script>
+						</scripting:transformer>
+						<logger message="#[payload]" level="INFO"
+							category="Instrument Response Payload for Update  Card" doc:name="Instrument Response Payload for Update  Card"
+							doc:description="Instrument Response Payload for Update  Card Logger" />
+					</when>
+					<when expression="#[flowVars.updateProfileRequiredVar == 'Yes']">
+						<scripting:transformer
+							doc:name="Transform Update Profile Response to Instrument" doc:description="Example Response from Groovy: {&quot;Instrument&quot;:{&quot;InstrumentId&quot;:&quot;marchant-99910&quot;,&quot;ProfileId&quot;:&quot;80593a09-5629-4025-8c35-1d4417196f3b&quot;,&quot;GatewayToken&quot;:&quot;CdMOe6sYoXxSeLe&quot;,&quot;GatewayResponseCode&quot;:&quot;&quot;,&quot;GatewayResponseMessage&quot;:&quot;&quot;,&quot;GatewayStatus&quot;:&quot;SUCCESS&quot;,&quot;type&quot;:&quot;Card account&quot;,&quot;SubType&quot;:&quot;Visa&quot;,&quot;IsDebit&quot;:&quot;false&quot;,&quot;HolderName&quot;:&quot;NJogn T Smith SS&quot;,&quot;Identifier&quot;:&quot;0000&quot;,&quot;ExpiryDate&quot;:&quot;2020-2-29&quot;,&quot;IssuedCountry&quot;:&quot;&quot;,&quot;AdditionalInfo&quot;:{}},&quot;Client&quot;:{&quot;ClientId&quot;:&quot;marchant-99910&quot;,&quot;AdditionalInfo&quot;:{}}}">
+							<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+import java.util.*
+
+def target_payload = new JsonBuilder()
+def resUpdateProfileApi = payload[1]
+def request_payload = flowVars['requestPayloadVar']
+
+target_payload Instrument: [
+                InstrumentId: request_payload.Instrument.InstrumentId,
+                ProfileId: resUpdateProfileApi.id,
+                GatewayToken: request_payload.Instrument.GatewayToken,
+                GatewayResponseCode : "",
+				GatewayResponseMessage : "",
+				GatewayStatus : "SUCCESS",
+                type: request_payload.Instrument.type,
+                SubType: request_payload.Instrument.SubType,
+                IsDebit: "",
+                HolderName: request_payload.Instrument.HolderName,
+                Identifier: request_payload.Instrument.Identifier,
+                ExpiryDate: request_payload.Instrument.ExpiryDate,
+                IssuedCountry: "",
+                AdditionalInfo: {}
+              ],
+              Client: [
+                ClientId: resUpdateProfileApi.merchantCustomerId ,
+                AdditionalInfo: {}
+              ]
+return target_payload.toString()]]></scripting:script>
+						</scripting:transformer>
+						<logger message="#[payload]" level="INFO"
+							category="Instrument Response Payload for Update  Profile"
+							doc:name="Instrument Response Payload for Update  Profile"
+							doc:description="Instrument Response Payload for Update  Profile Logger" />
+					</when>
+					<when expression="#[flowVars.updateAddressRequiredVar == 'Yes']">
+						<scripting:transformer
+							doc:name="Transform Update Address Response to Instrument" doc:description="Example Response from Groovy: {&quot;Instrument&quot;:{&quot;InstrumentId&quot;:&quot;marchant-99910&quot;,&quot;ProfileId&quot;:&quot;80593a09-5629-4025-8c35-1d4417196f3b&quot;,&quot;GatewayToken&quot;:&quot;CdMOe6sYoXxSeLe&quot;,&quot;GatewayResponseCode&quot;:&quot;&quot;,&quot;GatewayResponseMessage&quot;:&quot;&quot;,&quot;GatewayStatus&quot;:&quot;SUCCESS&quot;,&quot;type&quot;:&quot;Card account&quot;,&quot;SubType&quot;:&quot;Visa&quot;,&quot;IsDebit&quot;:&quot;&quot;,&quot;HolderName&quot;:&quot;NJogn T Smith SS&quot;,&quot;Identifier&quot;:&quot;0000&quot;,&quot;ExpiryDate&quot;:&quot;2020-02-29&quot;,&quot;IssuedCountry&quot;:&quot;&quot;,&quot;AdditionalInfo&quot;:{}},&quot;Client&quot;:{&quot;ClientId&quot;:&quot;marchant-99910&quot;,&quot;AdditionalInfo&quot;:{}}}">
+							<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+import java.util.*
+
+def target_payload = new JsonBuilder()
+def request_payload = flowVars['requestPayloadVar']
+
+target_payload Instrument: [
+                InstrumentId: request_payload.Instrument.InstrumentId,
+                ProfileId: request_payload.Client.ProfileId,
+                GatewayToken: request_payload.Instrument.GatewayToken,
+                GatewayResponseCode : "",
+				GatewayResponseMessage : "",
+				GatewayStatus : "SUCCESS",
+                type: request_payload.Instrument.type,
+                SubType: request_payload.Instrument.SubType,
+                IsDebit: "",
+                HolderName: request_payload.Instrument.HolderName,
+                Identifier: request_payload.Instrument.Identifier,
+                ExpiryDate: request_payload.Instrument.ExpiryDate,
+                IssuedCountry: "",
+                AdditionalInfo: {}
+              ],
+              Client: [
+                ClientId: request_payload.Client.ClientId ,
+                AdditionalInfo: {}
+              ]
+return target_payload.toString()]]></scripting:script>
+						</scripting:transformer>
+						<logger message="#[payload]" level="INFO"
+							category="Instrument Response Payload for Update  Address"
+							doc:name="Instrument Response Payload for Update  Address"
+							doc:description="Instrument Response Payload for Update  Address Logger" />
+					</when>
+					<otherwise>
+						<logger message="#[payload]" level="INFO"
+							category="Instrument || Update is not required" doc:name="Update is not required"
+							doc:description="Update is not required Logger" />
+					</otherwise>
+				</choice>
+
+
+			</when>
+			<otherwise>
+				<scripting:transformer doc:name="Transform Payload to Instrument Response">
+					<scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+import java.util.*
+
+def target_payload = new JsonBuilder()
+def request_payload = flowVars['requestPayloadVar']
+
+target_payload Instrument: [
+                InstrumentId: request_payload.Instrument.InstrumentId,
+                ProfileId: request_payload.Client.ProfileId,
+                GatewayToken: request_payload.Instrument.GatewayToken,
+                GatewayResponseCode : "",
+				GatewayResponseMessage : "",
+				GatewayStatus : "",
+                type: request_payload.Instrument.type,
+                SubType: request_payload.Instrument.SubType,
+                IsDebit: "",
+                HolderName: request_payload.Instrument.HolderName,
+                Identifier: request_payload.Instrument.Identifier,
+                ExpiryDate: request_payload.Instrument.ExpiryDate,
+                IssuedCountry: "",
+                AdditionalInfo: {}
+              ],
+              Client: [
+                ClientId: request_payload.Client.ClientId ,
+                AdditionalInfo: {}
+              ]
+return target_payload.toString()]]></scripting:script>
+				</scripting:transformer>
+				<logger message="#[payload]" level="INFO"
+					category="Instrument Response Payload || Update is not Required"
+					doc:name="Instrument Response Payload" />
+			</otherwise>
+
+		</choice>
+
+
+	</flow>
+	<sub-flow name="createCardSubFlow">
+		<logger message="#[payload]" level="INFO"
+			doc:name="Request  Payload to Create Card API" category="Instrument || Request Message for Create Card API"
+			doc:description="Request  Payload to Create Card API Logger" />
+		<http:request config-ref="HTTP_Paysafe_API_Configuration"
+			path="customervault/v1/profiles/{PROFILE_ID}/cards" method="POST"
+			doc:name="Create Card API" doc:description="Call to Create Card API">
+			<http:request-builder>
+                <http:uri-param paramName="PROFILE_ID" value="#[flowVars.ReqProfileId]"/>
+                <http:header headerName="Content-Type" value="application/json"/>
+                <http:header headerName="Authorization" value="#[flowVars.Apikey]"/>
+
+			</http:request-builder>
+		</http:request>
+		<logger message="#[message.payloadAs(java.lang.String)]" level="INFO"
+			doc:name="Response Payload From Create Card API" category="Instrument || Response from Create Card API"
+			doc:description="Response Payload From Create Card API Logger" />
+	</sub-flow>
+	<sub-flow name="preAuthorizationSubFlow">
+		<logger message="#[payload]" level="INFO"
+			doc:name="Request  Payload to Pre Authorization API" category="Instrument || Request  Payload to Pre Authorization API"
+			doc:description="Request  Payload to Pre Authorization API Logger" />
+		<http:request config-ref="HTTP_Paysafe_API_Configuration"
+			path="cardpayments/v1/accounts/{account_id}/auths" method="POST"
+			doc:name="Pre Authorization API" doc:description="Call to Pre Authorization API">
+			<http:request-builder>
+                <http:uri-param paramName="account_id" value="#[flowVars.Account_Id]"/>
+                <http:header headerName="Content-Type" value="application/json"/>
+                <http:header headerName="Authorization" value="#[flowVars.Apikey]"/>
+
+			</http:request-builder>
+		</http:request>
+		<logger message="#[message.payloadAs(java.lang.String)]" level="INFO"
+			doc:name="Response Payload From Pre Authorization API" category="Instrument || Response Payload From Pre Authorization API"
+			doc:description="Response Payload From Pre Authorization API Logger" />
+	</sub-flow>
+	<sub-flow name="createAddressSubFlow">
+		<logger message="#[payload]" level="INFO"
+			doc:name="Request  Payload to Create Address API" category="Instrument || Request  Payload to Create Address API"
+			doc:description="Request  Payload to Create Address API Logger" />
+		<http:request config-ref="HTTP_Paysafe_API_Configuration"
+			path="/customervault/v1/profiles/{PROFILE_ID}/addresses" method="POST"
+			doc:name="Create Address API" doc:description="Call to Create Address API">
+			<http:request-builder>
+                <http:uri-param paramName="PROFILE_ID" value="#[flowVars.ReqProfileId]"/>
+                <http:header headerName="Content-Type" value="application/json"/>
+                <http:header headerName="Authorization" value="#[flowVars.Apikey]"/>
+
+			</http:request-builder>
+		</http:request>
+		<logger message="#[message.payloadAs(java.lang.String)]" level="INFO"
+			doc:name="Response  Payload From Create Address API" category="Instrument || Response  Payload From Create Address API"
+			doc:description="Response  Payload From Create Address API Logger" />
+	</sub-flow>
+	<sub-flow name="createProfileSubFlow">
+		<logger message="#[payload]" level="INFO"
+			doc:name="Request  Payload to Create Profile API" category="Instrument || Request  Payload to Create Profile API"
+			doc:description="Request  Payload to Create Profile API Logger" />
+		<http:request config-ref="HTTP_Paysafe_API_Configuration"
+			path="/customervault/v1/profiles" method="POST" doc:name="Create Profile API"
+			doc:description="Call to Create Profile API">
+			<http:request-builder>
+                <http:header headerName="Content-Type" value="application/json"/>
+                <http:header headerName="Authorization" value="#[flowVars.Apikey]"/>
+
+			</http:request-builder>
+		</http:request>
+		<logger message="#[message.payloadAs(java.lang.String)]" level="INFO"
+			doc:name="Response Payload From Create Profile API" category="Instrument || Response Payload From Create Profile API"
+			doc:description="Response Payload From Create Profile API Logger" />
+	</sub-flow>
+</mule>
